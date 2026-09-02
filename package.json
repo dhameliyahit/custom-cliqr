@@ -1,0 +1,26 @@
+{
+  "name": "custom-cliq",
+  "version": "1.0.0",
+  "description": "Unified build, dev, and run scripts for CustomCliq NFC & QR Code SaaS platform",
+  "scripts": {
+    "install:client": "npm install --prefix client",
+    "install:server": "npm install --prefix server",
+    "install-all": "npm run install:server && npm run install:client",
+    "build:client": "npm run build --prefix client",
+    "build": "npm run build:client",
+    "start": "npm start --prefix server",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue.bold,cyan.bold\" \"npm start --prefix server\" \"npm run dev --prefix client\"",
+    "seed": "npm run seed --prefix server"
+  },
+  "keywords": [
+    "custom-cliq",
+    "nfc",
+    "qr-code",
+    "saas"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

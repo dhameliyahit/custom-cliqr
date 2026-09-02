@@ -1,0 +1,70 @@
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pm2-debug.log*
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+dev.pid
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+client/node_modules/
+server/node_modules/
+jspm_packages/
+
+# TypeScript / Build cache
+*.tsbuildinfo
+.npm
+.eslintcache
+.stylelintcache
+
+# Build directories
+client/dist/
+dist/
+
+# Environment files
+.env
+.env.*
+*.env
+server/.env
+client/.env
+!server/.env.example
+!client/.env.example
+!*.env.example
+
+# PM2 configs (contains database credentials and JWT secrets in production)
+ecosystem.config.js
+
+# OS Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI / Internal Agent & System Memory Files (Do NOT push to git)
+AGENT.md
+AGENTS.md
+*AGENT*.md
+*agent*.md
+CUSTOMCLIQ_SYSTEM_STATE.md
+.agents/
+.gemini/
+.system_generated/
