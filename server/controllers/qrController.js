@@ -6,6 +6,7 @@ const QrLink = require('../models/QrLink');
 const Batch = require('../models/Batch');
 const User = require('../models/User');
 const Setting = require('../models/Setting');
+const { invalidateRedirect, clearAllRedirectCache } = require('../services/redirectCache');
 
 // Helper to get active dynamic QR base domain
 const getQrBaseDomain = async (req) => {
@@ -445,6 +446,7 @@ exports.configureLink = async (req, res) => {
     }
 
     await link.save();
+    invalidateRedirect(link.code);
 
     const baseDomain = await getQrBaseDomain(req);
 
@@ -825,6 +827,7 @@ exports.deleteBulkLinks = async (req, res) => {
     const affectedBatchCodes = [...new Set(linksToDelete.map((l) => l.batchCode).filter(Boolean))];
 
     const result = await QrLink.deleteMany({ _id: { $in: linkIds } });
+    clearAllRedirectCache();
 
     // Recalculate counts for all affected batches
     for (const bCode of affectedBatchCodes) {
@@ -868,6 +871,7 @@ exports.deleteSingleLink = async (req, res) => {
 
     const batchCode = link.batchCode;
     await QrLink.findByIdAndDelete(id);
+    invalidateRedirect(link.code);
 
     if (batchCode) {
       const total = await QrLink.countDocuments({ batchCode });

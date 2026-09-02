@@ -69,7 +69,7 @@ export default function StatsCards({ stats }) {
         return (
           <div
             key={idx}
-            className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-2xs hover:border-black/30 transition-all"
+            className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-2xs hover:border-black/30 hover:shadow-md hover-lift transition-all"
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
