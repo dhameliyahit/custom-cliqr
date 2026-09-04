@@ -8,6 +8,20 @@ const User = require('../models/User');
 const Setting = require('../models/Setting');
 const { invalidateRedirect, clearAllRedirectCache } = require('../services/redirectCache');
 
+// Helper to create ZipArchive across archiver versions (supports both v7 function & v8 ZipArchive class)
+const createZipArchive = (options = { zlib: { level: 9 } }) => {
+  if (typeof archiver === 'function') {
+    return archiver('zip', options);
+  }
+  if (archiver && archiver.ZipArchive) {
+    return new archiver.ZipArchive(options);
+  }
+  if (archiver && archiver.default && typeof archiver.default === 'function') {
+    return archiver.default('zip', options);
+  }
+  return new archiver(options);
+};
+
 // Helper to get active dynamic QR base domain
 const getQrBaseDomain = async (req) => {
   try {
@@ -579,7 +593,7 @@ exports.exportQrData = async (req, res) => {
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
 
-      const archive = archiver('zip', { zlib: { level: 9 } });
+      const archive = createZipArchive({ zlib: { level: 9 } });
       archive.pipe(res);
 
       archive.on('error', (err) => {
@@ -767,14 +781,25 @@ exports.updateSettings = async (req, res) => {
   }
 };
 
-// @desc    Public / API Lookup for single QR link (used by redirection page)
+// @desc    Public / API Lookup for single QR link (used by redirection page & scanner)
 // @route   GET /api/qr/info/:code
 exports.getLinkByCode = async (req, res) => {
   try {
     const { code } = req.params;
-    const cleanCode = code.toUpperCase().trim();
+    if (!code) {
+      return res.status(400).json({ success: false, message: 'Code is required' });
+    }
+    const cleanCode = code.trim().toUpperCase();
+    const stripped = cleanCode.replace(/^CC-/i, '');
 
-    const link = await QrLink.findOne({ code: cleanCode });
+    const link = await QrLink.findOne({
+      $or: [
+        { code: cleanCode },
+        { code: `CC-${stripped}` },
+        { code: stripped },
+      ],
+    }).populate('assignedTo', 'name email phone company');
+
     if (!link) {
       return res.status(404).json({
         success: false,
@@ -791,9 +816,12 @@ exports.getLinkByCode = async (req, res) => {
         batchCode: link.batchCode,
         businessName: link.businessName,
         customerName: link.customerName,
+        customerPhone: link.customerPhone,
+        customerEmail: link.customerEmail,
         redirectUrl: link.redirectUrl,
         status: link.status,
         scanCount: link.scanCount,
+        assignedTo: link.assignedTo,
         fullUrl: `${baseDomain}/r/${link.code}`,
       },
     });

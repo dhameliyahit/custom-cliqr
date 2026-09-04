@@ -11,6 +11,7 @@ export default function FilterBar({
   onSelectByQuantity,
   onExport,
   onClearSelection,
+  onOpenScanModal,
 }) {
   const { isSuperAdmin } = useAuth();
 
@@ -67,17 +68,38 @@ export default function FilterBar({
           </select>
         </div>
 
-        {/* Search Input matching wireframe */}
-        <div className="flex-1 min-w-[220px]">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        {/* Search Input with Integrated Scan Button */}
+        <div className="flex-1 min-w-[240px]">
+          <div className="relative flex items-center">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder="Search by QR code, Batch, Customer..."
               value={filters.search || ''}
               onChange={(e) => onFilterChange('search', e.target.value)}
-              className="w-full h-10 pl-9 pr-4 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm font-medium text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all shadow-2xs"
+              className="w-full h-10 pl-9 pr-24 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm font-medium text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all shadow-2xs"
             />
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {filters.search && (
+                <button
+                  type="button"
+                  onClick={() => onFilterChange('search', '')}
+                  className="p-1 text-slate-400 hover:text-black rounded transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onOpenScanModal}
+                className="h-7 px-2.5 bg-black hover:bg-zinc-800 text-white rounded-md text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer group"
+                title="Scan QR Code or Upload Image to Search"
+              >
+                <QrCode className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Scan</span>
+              </button>
+            </div>
           </div>
         </div>
 

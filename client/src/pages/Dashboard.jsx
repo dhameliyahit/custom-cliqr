@@ -10,6 +10,7 @@ import AssignModal from '../components/AssignModal';
 import ConfigureLinkModal from '../components/ConfigureLinkModal';
 import QrPreviewModal from '../components/QrPreviewModal';
 import QuickActivateModal from '../components/QuickActivateModal';
+import QrScanModal from '../components/QrScanModal';
 import toast from 'react-hot-toast';
 
 export default function Dashboard() {
@@ -48,6 +49,7 @@ export default function Dashboard() {
   // Modals state
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [configureLink, setConfigureLink] = useState(null);
   const [previewLink, setPreviewLink] = useState(null);
 
@@ -257,6 +259,18 @@ export default function Dashboard() {
     setIsQuickActivateOpen(true);
   };
 
+  const handleApplyScanSearch = (code, matchedLink) => {
+    setFilters((prev) => ({
+      ...prev,
+      period: 'all',
+      adminId: 'all',
+      status: 'all',
+      search: code,
+    }));
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    toast.success(`Search filter applied: ${code}`);
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
       {/* Top Action Bar */}
@@ -289,6 +303,15 @@ export default function Dashboard() {
             title="Refresh table"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => setIsScanModalOpen(true)}
+            className="h-10 px-3 bg-white border border-slate-300 hover:border-black rounded-lg text-black transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
+            title="Scan QR Code or Upload Image to Search"
+          >
+            <QrCode className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-bold">Scan QR</span>
           </button>
 
           {isSuperAdmin ? (
@@ -325,6 +348,7 @@ export default function Dashboard() {
         onSelectByQuantity={handleSelectByQuantity}
         onExport={handleExport}
         onClearSelection={() => setSelectedIds([])}
+        onOpenScanModal={() => setIsScanModalOpen(true)}
       />
 
       {/* Main Data Table */}
@@ -408,6 +432,14 @@ export default function Dashboard() {
         isOpen={!!previewLink}
         onClose={() => setPreviewLink(null)}
         link={previewLink}
+      />
+
+      <QrScanModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+        onApplySearch={handleApplyScanSearch}
+        onConfigureLink={(link) => setConfigureLink(link)}
+        onQuickActivate={(link) => handleOpenQuickActivate(link)}
       />
     </div>
   );

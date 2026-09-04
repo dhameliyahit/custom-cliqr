@@ -142,3 +142,24 @@
 .nfc-card-aspect {
   aspect-ratio: 85.6 / 53.98;
 }
+
+/* PhonePe / Google Pay styled QR Laser Scan Animation */
+@keyframes scanLaser {
+  0% {
+    top: 4%;
+    opacity: 0.95;
+  }
+  50% {
+    top: 94%;
+    opacity: 1;
+  }
+  100% {
+    top: 4%;
+    opacity: 0.95;
+  }
+}
+
+.animate-scan-laser {
+  animation: scanLaser 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
