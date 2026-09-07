@@ -23,13 +23,13 @@ export default function StatsCards({ stats }) {
       label: 'Configured / Active',
       value: stats.configuredCount ?? 0,
       icon: CheckCircle2,
-      desc: 'Active customer cards',
+      desc: 'Active customer QRs',
     },
     {
       label: 'Total Scans & Taps',
       value: stats.totalScans ?? 0,
       icon: Activity,
-      desc: 'NFC and QR interactions',
+      desc: 'QR scan interactions',
     },
   ];
 
@@ -38,7 +38,7 @@ export default function StatsCards({ stats }) {
       label: 'My Assigned QRs',
       value: stats.totalAssigned ?? 0,
       icon: PackageCheck,
-      desc: 'Total cards in inventory',
+      desc: 'Total QRs in inventory',
     },
     {
       label: 'Configured / Sold',
@@ -56,7 +56,7 @@ export default function StatsCards({ stats }) {
       label: 'Customer Scans',
       value: stats.totalScans ?? 0,
       icon: Activity,
-      desc: 'Total visitor taps & scans',
+      desc: 'Total visitor scans',
     },
   ];
 

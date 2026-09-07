@@ -31,6 +31,10 @@ router.post('/assign', requireSuperAdmin, qrController.assignLinks);
 router.get('/settings', requireSuperAdmin, qrController.getSettings);
 router.put('/settings', requireSuperAdmin, qrController.updateSettings);
 
+// Google Sheet Live Lead Sync routes (Super Admin only)
+router.post('/google-sheet/test', requireSuperAdmin, qrController.testGoogleSheet);
+router.post('/google-sheet/sync-all', requireSuperAdmin, qrController.syncAllGoogleSheet);
+
 // Quick unassigned IDs lookup (for rapid number-based selection like 500 QRs)
 router.get('/unassigned-ids', requireSuperAdmin, qrController.getUnassignedIds);
 

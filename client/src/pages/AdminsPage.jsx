@@ -114,7 +114,7 @@ export default function AdminsPage() {
             <span>Admin & Reseller Management</span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Create reseller admins, monitor their card allocations, and control account status.
+            Create reseller admins, monitor their QR allocations, and control account status.
           </p>
         </div>
 
@@ -344,7 +344,7 @@ export default function AdminsPage() {
                   type="text"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="e.g. Smart NFC Solutions LLC"
+                  placeholder="e.g. Smart QR Solutions LLC"
                   className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-xs sm:text-sm font-semibold text-black focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>

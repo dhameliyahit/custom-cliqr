@@ -138,7 +138,8 @@
   transform: translateY(-1.5px);
 }
 
-/* Standard NFC Card dimensions ratio (85.6mm x 54mm = 1.585) */
+/* Standard QR Badge dimensions ratio (85.6mm x 54mm = 1.585) */
+.qr-badge-aspect,
 .nfc-card-aspect {
   aspect-ratio: 85.6 / 53.98;
 }

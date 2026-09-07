@@ -13,11 +13,18 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const extract10Digits = (phone) => {
+    if (!phone) return '';
+    const digits = phone.toString().replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+    return digits.slice(-10);
+  };
+
   useEffect(() => {
     if (link) {
       setBusinessName(link.businessName || '');
       setCustomerName(link.customerName || '');
-      setCustomerPhone(link.customerPhone || '');
+      setCustomerPhone(extract10Digits(link.customerPhone));
       setCustomerEmail(link.customerEmail || '');
       setRedirectUrl(link.redirectUrl || '');
       setStatus(link.status === 'inactive' ? 'inactive' : 'configured');
@@ -35,12 +42,19 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
       return;
     }
 
+    const phoneDigits = customerPhone.replace(/\D/g, '');
+    if (phoneDigits && phoneDigits.length !== 10) {
+      toast.error('Customer mobile number must be exactly 10 digits');
+      return;
+    }
+    const formattedPhone = phoneDigits ? `+91 ${phoneDigits}` : '';
+
     setLoading(true);
     try {
       const { data } = await api.put(`/qr/${link._id}/configure`, {
         businessName,
         customerName,
-        customerPhone,
+        customerPhone: formattedPhone,
         customerEmail,
         redirectUrl,
         status,
@@ -52,7 +66,7 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(linkUrl).catch(() => {});
         }
-        toast.success(`Card ${link.code} configured & link copied to clipboard!`, {
+        toast.success(`QR ${link.code} configured & link copied to clipboard!`, {
           icon: '📋',
         });
         onSuccess();
@@ -106,7 +120,7 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
               className="w-full h-11 px-3.5 bg-white border border-slate-300 rounded-lg text-sm font-semibold text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
             />
             <p className="text-[11px] text-slate-500 mt-1.5">
-              When anyone scans or taps this NFC card, they will instantly be redirected to this link.
+              When anyone scans this QR code, they will instantly be redirected to this link.
             </p>
           </div>
 
@@ -143,17 +157,31 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
-                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                <span>Customer Phone</span>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Customer Mobile</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono font-normal">
+                  {customerPhone.length}/10
+                </span>
               </label>
-              <input
-                type="text"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="e.g. +1-555-0199"
-                className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-black focus:outline-none focus:ring-1 focus:ring-black"
-              />
+              <div className="flex items-center">
+                <span className="inline-flex items-center px-2.5 h-10 rounded-l-lg border border-r-0 border-slate-300 bg-slate-100 text-slate-700 text-xs font-bold select-none shrink-0 font-mono">
+                  +91
+                </span>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  value={customerPhone}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setCustomerPhone(digits);
+                  }}
+                  placeholder="9876543210"
+                  className="w-full h-10 px-3 bg-white border border-slate-300 rounded-r-lg text-xs font-semibold text-black focus:outline-none focus:ring-1 focus:ring-black font-mono tracking-wide"
+                />
+              </div>
             </div>
 
             <div>
@@ -176,7 +204,7 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
             <div className="flex items-center gap-2.5">
               <Power className={`w-4 h-4 ${status === 'configured' ? 'text-emerald-600' : 'text-slate-400'}`} />
               <div>
-                <p className="text-xs font-bold text-black">Card Status</p>
+                <p className="text-xs font-bold text-black">QR Status</p>
                 <p className="text-[11px] text-slate-500">
                   {status === 'configured' ? 'Active & Redirecting' : 'Paused / Inactive'}
                 </p>
@@ -206,7 +234,7 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Sold on March 2nd, Black matte card, Order #104"
+              placeholder="e.g. Sold on March 2nd, QR Standee #12, Order #104"
               className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-xs font-medium text-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>

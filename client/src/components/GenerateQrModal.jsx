@@ -61,7 +61,7 @@ export default function GenerateQrModal({ isOpen, onClose, onSuccess }) {
             </div>
             <div>
               <h2 className="text-base font-bold text-black">Generate QR Links</h2>
-              <p className="text-xs text-slate-500">Bulk generation for smart NFC cards</p>
+              <p className="text-xs text-slate-500">Bulk generation for smart QR codes</p>
             </div>
           </div>
           <button
@@ -126,7 +126,7 @@ export default function GenerateQrModal({ isOpen, onClose, onSuccess }) {
               type="text"
               value={batchCode}
               onChange={(e) => setBatchCode(e.target.value.toUpperCase())}
-              placeholder="e.g. BATCH-2026-NFC-01"
+              placeholder="e.g. BATCH-2026-QR-01"
               className="w-full h-11 px-3.5 font-mono uppercase bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
             />
             <p className="text-[11px] text-slate-400 mt-1">
@@ -143,7 +143,7 @@ export default function GenerateQrModal({ isOpen, onClose, onSuccess }) {
               rows="2"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Glossy black PVC smart business cards for March expo"
+              placeholder="e.g. Table standees & QR stickers for March expo"
               className="w-full p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all resize-none"
             />
           </div>

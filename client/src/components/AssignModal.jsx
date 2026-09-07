@@ -15,12 +15,13 @@ export default function AssignModal({
   const [selectedAdminId, setSelectedAdminId] = useState('');
   const [assignMode, setAssignMode] = useState('selected'); // 'selected' | 'batch_qty'
   const [selectedBatchCode, setSelectedBatchCode] = useState('');
-  const [batchQuantity, setBatchQuantity] = useState(50);
+  const [batchQuantity, setBatchQuantity] = useState(0);
   const [loading, setLoading] = useState(false);
   const [fetchingAdmins, setFetchingAdmins] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setBatchQuantity(0);
       fetchAdmins();
       if (initialBatchCode) {
         setSelectedBatchCode(initialBatchCode);
@@ -70,8 +71,14 @@ export default function AssignModal({
       if (assignMode === 'selected') {
         payload.linkIds = selectedLinkIds;
       } else {
+        const qty = parseInt(batchQuantity, 10);
+        if (isNaN(qty) || qty <= 0) {
+          toast.error('Please enter a quantity greater than 0');
+          setLoading(false);
+          return;
+        }
         payload.batchCode = selectedBatchCode;
-        payload.quantity = parseInt(batchQuantity, 10);
+        payload.quantity = qty;
       }
 
       const { data } = await api.post('/qr/assign', payload);
@@ -176,11 +183,11 @@ export default function AssignModal({
                 </div>
                 <input
                   type="number"
-                  min="1"
+                  min="0"
                   max="5000"
                   value={batchQuantity}
                   onChange={(e) => setBatchQuantity(e.target.value)}
-                  placeholder="e.g. 500"
+                  placeholder="0"
                   className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-black mb-2 focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
                 />
 

@@ -37,7 +37,7 @@ export default function BatchesPage() {
       const isZip = format === 'zip';
       toast.loading(
         isZip
-          ? `Generating QR images ZIP for ${batchCode}...`
+          ? `Generating print-ready SVGs ZIP for ${batchCode}...`
           : `Preparing ${batchCode} (${format.toUpperCase()})...`,
         { id: 'batch-export-toast' }
       );
@@ -70,10 +70,10 @@ export default function BatchesPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-black tracking-tight flex items-center gap-2">
             <Layers className="w-6 h-6 text-black" />
-            <span>NFC & QR Batch Management</span>
+            <span>QR Batch Management</span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Track manufacturing batches, inspect inventory ratios, and export CSV files for NFC RFID encoding machines.
+            Track QR batches, inspect inventory ratios, and export spreadsheets or high-res images.
           </p>
         </div>
 
@@ -104,7 +104,7 @@ export default function BatchesPage() {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by Batch Code (e.g. BATCH-2026-NFC)..."
+            placeholder="Search by Batch Code (e.g. BATCH-2026-QR)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-10 pl-9 pr-4 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm font-medium text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all shadow-2xs"
@@ -207,14 +207,14 @@ export default function BatchesPage() {
                           </button>
                         )}
 
-                        {/* Export CSV for NFC Machines */}
+                        {/* Export CSV */}
                         <button
                           onClick={() => handleExportBatch(batch.batchCode, 'csv')}
-                          className="h-8 px-2.5 bg-black text-white hover:bg-zinc-800 rounded-md text-xs font-bold flex items-center gap-1 transition-colors shadow-2xs"
-                          title="Export CSV for NFC Machine Writer"
+                          className="h-8 px-2.5 bg-black text-white hover:bg-zinc-800 rounded-md text-xs font-bold flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                          title="Export CSV spreadsheet"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          <span>CSV (NFC)</span>
+                          <span>CSV</span>
                         </button>
 
                         {/* Export XLSX */}
@@ -227,14 +227,14 @@ export default function BatchesPage() {
                           <span>Excel</span>
                         </button>
 
-                        {/* Export High-Res QR Images (ZIP) */}
+                        {/* Export High-Res Vector SVGs (ZIP) */}
                         <button
                           onClick={() => handleExportBatch(batch.batchCode, 'zip')}
                           className="h-8 px-2.5 bg-zinc-900 text-white hover:bg-zinc-800 rounded-md text-xs font-bold flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
-                          title="Download all high-res 1000px QR PNGs in a ZIP archive for card printing"
+                          title="Download all print-ready vector SVGs (with centered codes) & manifest in a ZIP archive"
                         >
                           <QrCode className="w-3.5 h-3.5 text-amber-400" />
-                          <span>ZIP (QRs)</span>
+                          <span>ZIP (SVGs)</span>
                         </button>
                       </div>
                     </td>

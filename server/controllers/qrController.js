@@ -7,6 +7,12 @@ const Batch = require('../models/Batch');
 const User = require('../models/User');
 const Setting = require('../models/Setting');
 const { invalidateRedirect, clearAllRedirectCache } = require('../services/redirectCache');
+const {
+  syncLeadToGoogleSheet,
+  testGoogleSheetWebhook,
+  syncAllLinksToGoogleSheet,
+  GOOGLE_APPS_SCRIPT_TEMPLATE,
+} = require('../services/googleSheetService');
 
 // Helper to create ZipArchive across archiver versions (supports both v7 function & v8 ZipArchive class)
 const createZipArchive = (options = { zlib: { level: 9 } }) => {
@@ -40,6 +46,42 @@ const getQrBaseDomain = async (req) => {
     return `${protocol}://${host}`;
   }
   return process.env.DEFAULT_QR_DOMAIN || 'http://localhost:5173';
+};
+
+// Helper to generate print-ready vector SVG containing QR code + centered short code below it
+const generatePrintableQrSvg = async (targetUrl, code) => {
+  const qrSvg = await QRCode.toString(targetUrl, {
+    type: 'svg',
+    margin: 1,
+    color: { dark: '#000000', light: '#ffffff' },
+  });
+
+  const viewBoxMatch = qrSvg.match(/viewBox="([^"]+)"/);
+  const viewBox = viewBoxMatch ? viewBoxMatch[1] : '0 0 33 33';
+
+  // Extract only the inner paths between <svg...> and </svg> to prevent duplicate closing tags
+  const startIdx = qrSvg.indexOf('>');
+  const endIdx = qrSvg.lastIndexOf('</svg>');
+  const innerContent = (startIdx !== -1 && endIdx !== -1)
+    ? qrSvg.substring(startIdx + 1, endIdx).trim()
+    : qrSvg.replace(/^<svg[^>]*>/i, '').replace(/<\/svg>[\s\r\n]*$/i, '').trim();
+
+  const width = 600;
+  const height = 610;
+  const qrSize = 500;
+  const qrX = (width - qrSize) / 2; // 50
+  const qrY = 35;
+  const textY = 565;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <svg x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" viewBox="${viewBox}" shape-rendering="crispEdges">
+    ${innerContent}
+  </svg>
+  <!-- Centered Short Code below QR for clear identification on print/standees -->
+  <text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="central" font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, monospace, sans-serif" font-size="34" font-weight="900" fill="#000000" letter-spacing="4">${code}</text>
+</svg>`;
 };
 
 // Helper to generate a random 6-character alphanumeric slug (e.g. CC-9X7K2P)
@@ -439,7 +481,27 @@ exports.configureLink = async (req, res) => {
 
     if (businessName !== undefined) link.businessName = businessName.trim();
     if (customerName !== undefined) link.customerName = customerName.trim();
-    if (customerPhone !== undefined) link.customerPhone = customerPhone.trim();
+    if (customerPhone !== undefined) {
+      const raw = customerPhone.toString().trim();
+      if (raw) {
+        let digits = raw.replace(/\D/g, '');
+        if (digits.length === 12 && digits.startsWith('91')) {
+          digits = digits.slice(2);
+        }
+        if (digits.length > 10) {
+          digits = digits.slice(-10);
+        }
+        if (digits.length > 0 && digits.length < 10) {
+          return res.status(400).json({
+            success: false,
+            message: 'Mobile number must be a valid 10-digit number',
+          });
+        }
+        link.customerPhone = digits.length === 10 ? `+91 ${digits}` : raw;
+      } else {
+        link.customerPhone = '';
+      }
+    }
     if (customerEmail !== undefined) link.customerEmail = customerEmail.trim();
     if (notes !== undefined) link.notes = notes.trim();
 
@@ -463,6 +525,15 @@ exports.configureLink = async (req, res) => {
     invalidateRedirect(link.code);
 
     const baseDomain = await getQrBaseDomain(req);
+
+    // Asynchronously trigger Google Sheet Live Lead Sync (fire-and-forget, non-blocking)
+    QrLink.findById(link._id)
+      .populate('assignedTo', 'name email phone company')
+      .lean()
+      .then((popLink) => {
+        if (popLink) syncLeadToGoogleSheet(popLink, baseDomain);
+      })
+      .catch((err) => console.error('[GoogleSheetSync] Error fetching populated link:', err));
 
     return res.status(200).json({
       success: true,
@@ -501,11 +572,7 @@ exports.downloadQrCode = async (req, res) => {
     const targetUrl = `${baseDomain}/r/${link.code}`;
 
     if (format === 'svg') {
-      const svgString = await QRCode.toString(targetUrl, {
-        type: 'svg',
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-      });
+      const svgString = await generatePrintableQrSvg(targetUrl, link.code);
       res.setHeader('Content-Type', 'image/svg+xml');
       res.setHeader(
         'Content-Disposition',
@@ -588,12 +655,13 @@ exports.exportQrData = async (req, res) => {
 
     const filename = `CustomCliq_Export_${batchCode || (query._id ? 'Selected' : 'All')}_${Date.now()}`;
 
-    // Handle ZIP Export of 1000px High-Res PNG QR Images
+    // Handle ZIP Export of Print-Ready Vector SVGs (with centered codes) & Manifest
     if (format === 'zip') {
       res.setHeader('Content-Type', 'application/zip');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}.zip"`);
 
-      const archive = createZipArchive({ zlib: { level: 9 } });
+      // level: 1 for ultra-fast live generation with minimal CPU overhead
+      const archive = createZipArchive({ zlib: { level: 1 } });
       archive.pipe(res);
 
       archive.on('error', (err) => {
@@ -608,16 +676,24 @@ exports.exportQrData = async (req, res) => {
       const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
       archive.append(excelBuffer, { name: 'manifest.xlsx' });
 
-      // 2. Generate and append 1000px High-Res PNG images for each card
-      for (const link of links) {
-        const tapUrl = `${baseDomain}/r/${link.code}`;
-        const pngBuffer = await QRCode.toBuffer(tapUrl, {
-          type: 'png',
-          width: 1000,
-          margin: 2,
-          color: { dark: '#000000', light: '#ffffff' },
-        });
-        archive.append(pngBuffer, { name: `qr-images/${link.code}.png` });
+      // 2. Generate and append Print-Ready Vector SVGs in concurrent chunks for high-speed live production
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < links.length; i += CHUNK_SIZE) {
+        const chunk = links.slice(i, i + CHUNK_SIZE);
+        const batchResults = await Promise.all(
+          chunk.map(async (link) => {
+            const tapUrl = `${baseDomain}/r/${link.code}`;
+            const svgString = await generatePrintableQrSvg(tapUrl, link.code);
+            return {
+              name: `qr-svgs/${link.code}.svg`,
+              buffer: Buffer.from(svgString, 'utf-8'),
+            };
+          })
+        );
+
+        for (const item of batchResults) {
+          archive.append(item.buffer, { name: item.name });
+        }
       }
 
       await archive.finalize();
@@ -729,6 +805,7 @@ exports.getSettings = async (req, res) => {
       success: true,
       settings: settingsMap,
       activeDomain,
+      googleAppsScriptTemplate: GOOGLE_APPS_SCRIPT_TEMPLATE,
     });
   } catch (error) {
     return res.status(500).json({
@@ -740,7 +817,12 @@ exports.getSettings = async (req, res) => {
 
 exports.updateSettings = async (req, res) => {
   try {
-    const { qr_base_domain, company_name } = req.body;
+    const {
+      qr_base_domain,
+      company_name,
+      google_sheet_webhook_url,
+      google_sheet_sync_enabled,
+    } = req.body;
 
     if (qr_base_domain !== undefined) {
       await Setting.findOneAndUpdate(
@@ -766,6 +848,30 @@ exports.updateSettings = async (req, res) => {
       );
     }
 
+    if (google_sheet_webhook_url !== undefined) {
+      await Setting.findOneAndUpdate(
+        { key: 'google_sheet_webhook_url' },
+        {
+          key: 'google_sheet_webhook_url',
+          value: google_sheet_webhook_url.trim(),
+          description: 'Google Apps Script Webhook URL for live lead sync',
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    if (google_sheet_sync_enabled !== undefined) {
+      await Setting.findOneAndUpdate(
+        { key: 'google_sheet_sync_enabled' },
+        {
+          key: 'google_sheet_sync_enabled',
+          value: Boolean(google_sheet_sync_enabled),
+          description: 'Toggle for automatic Google Sheet lead sync',
+        },
+        { upsert: true, new: true }
+      );
+    }
+
     const activeDomain = await getQrBaseDomain(req);
 
     return res.status(200).json({
@@ -777,6 +883,67 @@ exports.updateSettings = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to update settings',
+    });
+  }
+};
+
+// @desc    Test Google Sheet Webhook Connection
+// @route   POST /api/qr/google-sheet/test
+exports.testGoogleSheet = async (req, res) => {
+  try {
+    let { webhookUrl } = req.body;
+    if (!webhookUrl) {
+      const urlSetting = await Setting.findOne({ key: 'google_sheet_webhook_url' });
+      webhookUrl = urlSetting ? urlSetting.value : '';
+    }
+
+    const result = await testGoogleSheetWebhook(webhookUrl);
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Sync All Links to Google Sheet (Configured at top, 2 blank spacer rows, then empty/assigned/unassigned)
+// @route   POST /api/qr/google-sheet/sync-all
+exports.syncAllGoogleSheet = async (req, res) => {
+  try {
+    const { webhookUrl } = req.body;
+
+    // 1. Fetch configured links (active leads) to place at top
+    const configuredLinks = await QrLink.find({ status: 'configured' })
+      .populate('assignedTo', 'name email phone company')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    // 2. Fetch all other links (assigned, unassigned, inactive)
+    const otherLinks = await QrLink.find({ status: { $ne: 'configured' } })
+      .populate('assignedTo', 'name email phone company')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const totalCount = configuredLinks.length + otherLinks.length;
+    if (totalCount === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No QR links found in the system to sync yet',
+      });
+    }
+
+    const baseDomain = await getQrBaseDomain(req);
+    const result = await syncAllLinksToGoogleSheet(
+      { configuredLinks, otherLinks },
+      baseDomain,
+      webhookUrl
+    );
+    return res.status(200).json(result);
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
     });
   }
 };

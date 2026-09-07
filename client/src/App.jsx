@@ -19,7 +19,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          {/* Public Redirection & NFC Tag Scan Routes */}
+          {/* Public Redirection & QR Code Scan Routes */}
           <Route path="/r/:code" element={<PublicRedirect />} />
           <Route path="/tag/:code" element={<PublicRedirect />} />
 

@@ -150,4 +150,14 @@ export const downloadExportFile = async ({
   window.URL.revokeObjectURL(url);
 };
 
+export const testGoogleSheet = async (webhookUrl) => {
+  const response = await api.post('/qr/google-sheet/test', { webhookUrl });
+  return response.data;
+};
+
+export const syncAllToGoogleSheet = async (webhookUrl) => {
+  const response = await api.post('/qr/google-sheet/sync-all', { webhookUrl });
+  return response.data;
+};
+
 export default api;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, RefreshCw, QrCode, Zap, Radio } from 'lucide-react';
+import { Plus, RefreshCw, QrCode, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api, { downloadExportFile } from '../services/api';
 import StatsCards from '../components/StatsCards';
@@ -221,7 +221,7 @@ export default function Dashboard() {
     try {
       const isZip = format === 'zip';
       toast.loading(
-        isZip ? 'Generating QR images ZIP archive...' : `Preparing ${format.toUpperCase()} export...`,
+        isZip ? 'Generating print-ready SVGs ZIP archive...' : `Preparing ${format.toUpperCase()} export...`,
         { id: 'export-toast' }
       );
 
@@ -234,7 +234,7 @@ export default function Dashboard() {
       });
 
       toast.success(
-        isZip ? 'QR Images ZIP archive downloaded!' : `${format.toUpperCase()} exported successfully!`,
+        isZip ? 'Print-ready SVGs ZIP archive downloaded!' : `${format.toUpperCase()} exported successfully!`,
         { id: 'export-toast' }
       );
     } catch (err) {
@@ -271,6 +271,43 @@ export default function Dashboard() {
     toast.success(`Search filter applied: ${code}`);
   };
 
+  // Quick status toggle (Active vs Paused)
+  const handleToggleStatus = async (link) => {
+    if (!link.redirectUrl || (link.status !== 'configured' && link.status !== 'inactive')) {
+      toast.error('Configure destination link first before activating or pausing');
+      return;
+    }
+
+    const newStatus = link.status === 'configured' ? 'inactive' : 'configured';
+
+    // Optimistic update
+    setLinks((prev) =>
+      prev.map((l) => (l._id === link._id ? { ...l, status: newStatus } : l))
+    );
+
+    try {
+      const { data } = await api.put(`/qr/${link._id}/configure`, {
+        status: newStatus,
+      });
+
+      if (data.success) {
+        toast.success(
+          newStatus === 'configured'
+            ? `QR ${link.code} is now Live & Active!`
+            : `QR ${link.code} is Paused.`,
+          { id: `status-toast-${link._id}` }
+        );
+        fetchStats();
+      }
+    } catch (err) {
+      // Revert on error
+      setLinks((prev) =>
+        prev.map((l) => (l._id === link._id ? { ...l, status: link.status } : l))
+      );
+      toast.error(err.response?.data?.message || 'Failed to update QR status');
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto">
       {/* Top Action Bar */}
@@ -284,15 +321,15 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <Radio className="w-6 h-6 text-black" />
-                <span>My Smart NFC Cards</span>
+                <QrCode className="w-6 h-6 text-black" />
+                <span>My QR Codes</span>
               </>
             )}
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             {isSuperAdmin
               ? 'Bulk generate QR batches, assign links to admins, and monitor scan redirects.'
-              : 'Activate smart NFC cards for business clients and configure redirection links on the spot.'}
+              : 'Activate QR codes for business clients and configure redirection links on the spot.'}
           </p>
         </div>
 
@@ -328,7 +365,7 @@ export default function Dashboard() {
               className="flex-1 sm:flex-initial h-10 px-4 bg-black text-white hover:bg-zinc-800 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
             >
               <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>Activate Card On-The-Spot</span>
+              <span>Activate QR On-The-Spot</span>
             </button>
           )}
         </div>
@@ -364,6 +401,7 @@ export default function Dashboard() {
         onPreviewQr={(link) => setPreviewLink(link)}
         onDeleteLink={handleDeleteSingle}
         onQuickActivate={handleOpenQuickActivate}
+        onToggleStatus={handleToggleStatus}
       />
 
       {/* Mobile Floating Action Button (FAB) for Reseller Admin */}
@@ -372,7 +410,7 @@ export default function Dashboard() {
           type="button"
           onClick={() => handleOpenQuickActivate()}
           className="sm:hidden fixed bottom-5 right-5 z-40 h-13 px-4 bg-black hover:bg-zinc-900 text-white rounded-full shadow-2xl flex items-center gap-2 border border-amber-400/80 transition-all active:scale-95 cursor-pointer"
-          title="Activate Card On-The-Spot"
+          title="Activate QR On-The-Spot"
         >
           <Zap className="w-5 h-5 text-amber-400 fill-amber-400 animate-pulse" />
           <span className="text-xs font-black tracking-wider uppercase">Activate</span>

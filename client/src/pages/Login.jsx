@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Radio, ArrowRight, Lock, Mail, Loader2 } from 'lucide-react';
+import { QrCode, ArrowRight, Lock, Mail, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -34,12 +34,12 @@ export default function Login() {
         {/* Brand Header */}
         <div className="flex items-center justify-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-xl bg-black text-white flex items-center justify-center shadow-md">
-            <Radio className="w-6 h-6 text-white" />
+            <QrCode className="w-6 h-6 text-white" />
           </div>
           <div>
             <h1 className="text-2xl font-black tracking-tight text-black">CustomCliq</h1>
             <p className="text-[11px] font-bold tracking-widest text-slate-400 uppercase">
-              Smart NFC & QR Platform
+              Smart QR Platform
             </p>
           </div>
         </div>

@@ -26,6 +26,7 @@ export default function DataTable({
   onPreviewQr,
   onDeleteLink,
   onQuickActivate,
+  onToggleStatus,
 }) {
   const { isSuperAdmin } = useAuth();
   const [copiedCode, setCopiedCode] = useState(null);
@@ -43,26 +44,30 @@ export default function DataTable({
     switch (status) {
       case 'configured':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            Active / Linked
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Active / Linked</span>
           </span>
         );
       case 'assigned':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
-            Assigned (Empty)
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+            <span>Assigned</span>
           </span>
         );
       case 'unassigned':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-            Unassigned
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            <span>Unassigned</span>
           </span>
         );
       case 'inactive':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-            Inactive
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+            <span>Paused</span>
           </span>
         );
       default:
@@ -92,7 +97,7 @@ export default function DataTable({
               <th className="py-3 px-4 font-bold">QR Code / Slug</th>
               <th
                 className="py-3 px-4 font-bold"
-                title="Tracks physical card lots for NFC chip encoding & manufacturing records"
+                title="Tracks QR batches and generation records"
               >
                 Group / Batch
               </th>
@@ -102,7 +107,7 @@ export default function DataTable({
 
               <th
                 className="py-3 px-4 font-bold"
-                title="The live destination URL. When tapped, the card forwards here automatically."
+                title="The live destination URL. When scanned, the QR forwards here automatically."
               >
                 Redirection Link
               </th>
@@ -111,7 +116,7 @@ export default function DataTable({
 
               <th
                 className="py-3 px-4 font-bold text-center"
-                title="Total real-time NFC taps and QR scan interactions"
+                title="Total real-time QR scan interactions"
               >
                 Scans
               </th>
@@ -262,7 +267,73 @@ export default function DataTable({
 
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Live / Pause Toggle Switch */}
+                        {(() => {
+                          const isConfigurable = (link.status === 'configured' || link.status === 'inactive') && Boolean(link.redirectUrl);
+                          const isActive = link.status === 'configured';
+                          const tooltipLabel = !isConfigurable
+                            ? 'Configure destination URL first to enable switch'
+                            : isActive
+                            ? 'Live & Active · Click to Pause'
+                            : 'Paused · Click to Activate Live traffic';
+
+                          return (
+                            <div className="relative group/toggle flex items-center">
+                              <button
+                                type="button"
+                                disabled={!isConfigurable}
+                                onClick={() => onToggleStatus && onToggleStatus(link)}
+                                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 select-none ${
+                                  !isConfigurable
+                                    ? 'opacity-35 cursor-not-allowed bg-slate-200 border border-slate-300/60'
+                                    : isActive
+                                    ? 'bg-emerald-500 hover:bg-emerald-600 cursor-pointer shadow-[0_2px_8px_rgba(16,185,129,0.35)] active:scale-95'
+                                    : 'bg-slate-300 hover:bg-slate-400 cursor-pointer active:scale-95'
+                                }`}
+                                aria-label={tooltipLabel}
+                              >
+                                <span
+                                  className={`pointer-events-none flex items-center justify-center h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_1px_1px_rgba(0,0,0,0.1)] ring-0 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                                    isActive ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                >
+                                  {/* Internal micro-indicator dot
+                                  <span
+                                    className={`h-1.5 w-1.5 rounded-full transition-colors duration-200 ${
+                                      !isConfigurable
+                                        ? 'bg-slate-300'
+                                        : isActive
+                                        ? 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.8)]'
+                                        : 'bg-slate-400'
+                                    }`}
+                                  /> */}
+                                </span>
+                              </button>
+
+                              {/* Instant Floating Tooltip */}
+                              <div className="pointer-events-none absolute bottom-full right-0 mb-2 hidden group-hover/toggle:flex flex-col items-end z-40 transition-all duration-150 drop-shadow-md">
+                                <div className="whitespace-nowrap rounded-lg bg-slate-900/95 backdrop-blur-xs px-2.5 py-1 text-[11px] font-semibold text-white shadow-xl flex items-center gap-1.5 border border-slate-700/50">
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      !isConfigurable
+                                        ? 'bg-slate-400'
+                                        : isActive
+                                        ? 'bg-emerald-400 animate-pulse'
+                                        : 'bg-rose-400'
+                                    }`}
+                                  />
+                                  <span>{tooltipLabel}</span>
+                                </div>
+                                <div className="w-2 h-1 mr-4 border-x-4 border-x-transparent border-t-4 border-t-slate-900" />
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Subtle Divider */}
+                        <div className="h-4 w-px bg-slate-200 mx-0.5" />
+
                         {/* Configure / Edit button */}
                         <button
                           onClick={() => onConfigureLink(link)}
@@ -276,7 +347,7 @@ export default function DataTable({
                         <button
                           onClick={() => onPreviewQr(link)}
                           className="p-1.5 text-slate-600 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 cursor-pointer transition-colors"
-                          title="Preview & Download QR Code / Card"
+                          title="Preview & Download QR Code"
                         >
                           <QrCode className="w-4 h-4" />
                         </button>
@@ -301,18 +372,18 @@ export default function DataTable({
         </table>
       </div>
 
-      {/* Mobile Touch-Friendly Card List (screens < 768px) */}
+      {/* Mobile Touch-Friendly QR List (screens < 768px) */}
       <div className="block md:hidden p-3 space-y-3 bg-slate-50/50 min-h-[300px]">
         {loading ? (
           <div className="py-16 text-center text-slate-400">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-black mb-2"></div>
-            <p className="text-xs font-medium">Loading cards...</p>
+            <p className="text-xs font-medium">Loading QRs...</p>
           </div>
         ) : links.length === 0 ? (
           <div className="py-16 text-center text-slate-500">
             <QrCode className="w-10 h-10 mx-auto text-slate-300 mb-2" />
             <p className="font-bold text-sm text-black">No QR Links Found</p>
-            <p className="text-xs text-slate-400 mt-0.5">No cards found matching your filters.</p>
+            <p className="text-xs text-slate-400 mt-0.5">No QRs found matching your filters.</p>
           </div>
         ) : (
           links.map((link) => {
@@ -352,15 +423,68 @@ export default function DataTable({
                     </button>
                   </div>
 
-                  {/* Status Pill */}
-                  {getStatusBadge(link.status)}
+                  <div className="flex items-center gap-2">
+                    {/* Status Toggle Switch */}
+                    {(() => {
+                      const isConfigurable = (link.status === 'configured' || link.status === 'inactive') && Boolean(link.redirectUrl);
+                      const isActive = link.status === 'configured';
+
+                      return (
+                        <button
+                          type="button"
+                          disabled={!isConfigurable}
+                          onClick={() => onToggleStatus && onToggleStatus(link)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] focus:outline-none select-none ${
+                            !isConfigurable
+                              ? 'opacity-35 cursor-not-allowed bg-slate-200 border border-slate-300/60'
+                              : isActive
+                              ? 'bg-emerald-500 shadow-[0_2px_8px_rgba(16,185,129,0.35)] active:scale-90'
+                              : 'bg-slate-300 active:scale-90'
+                          }`}
+                          title={
+                            !isConfigurable
+                              ? 'Configure destination URL first'
+                              : isActive
+                              ? 'QR is Active. Tap to Pause'
+                              : 'QR is Paused. Tap to Activate'
+                          }
+                          aria-label={
+                            !isConfigurable
+                              ? 'Configure destination URL first'
+                              : isActive
+                              ? 'QR is Active. Tap to Pause'
+                              : 'QR is Paused. Tap to Activate'
+                          }
+                        >
+                          <span
+                            className={`pointer-events-none flex items-center justify-center h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_1px_1px_rgba(0,0,0,0.1)] ring-0 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                              isActive ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full transition-colors duration-200 ${
+                                !isConfigurable
+                                  ? 'bg-slate-300'
+                                  : isActive
+                                  ? 'bg-emerald-500'
+                                  : 'bg-slate-400'
+                              }`}
+                            />
+                          </span>
+                        </button>
+                      );
+                    })()}
+
+                    {/* Status Pill */}
+                    {getStatusBadge(link.status)}
+                  </div>
                 </div>
 
                 {/* Business & Destination Info */}
                 <div className="space-y-1 mb-3">
                   <h4 className="font-bold text-sm text-black truncate">
                     {link.businessName || (
-                      <span className="text-slate-400 font-normal italic">Unconfigured Tag</span>
+                      <span className="text-slate-400 font-normal italic">Unconfigured QR</span>
                     )}
                   </h4>
 

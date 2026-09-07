@@ -146,7 +146,7 @@ export default function FilterBar({
           </button>
           <button
             onClick={() => onExport('csv')}
-            title="Export CSV for NFC Encoding Machine"
+            title="Export CSV Spreadsheet"
             className="h-10 px-3 bg-white border border-slate-300 hover:border-black text-black rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-slate-600" />
@@ -154,11 +154,11 @@ export default function FilterBar({
           </button>
           <button
             onClick={() => onExport('zip')}
-            title="Download Bulk High-Res QR PNG Images (ZIP Archive)"
+            title="Download Bulk Print-Ready Vector SVGs with Centered Codes (ZIP Archive)"
             className="h-10 px-3 bg-white border border-slate-300 hover:border-black text-black rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
           >
             <QrCode className="w-3.5 h-3.5 text-slate-600" />
-            <span className="hidden sm:inline">ZIP (QRs)</span>
+            <span className="hidden sm:inline">ZIP (SVGs)</span>
           </button>
         </div>
       </div>
@@ -176,7 +176,7 @@ export default function FilterBar({
             <button
               onClick={() => onExport('zip')}
               className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-md text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Download selected QR images in a ZIP archive"
+              title="Download selected print-ready QR SVGs in a ZIP archive"
             >
               <QrCode className="w-3.5 h-3.5 text-amber-400" />
               <span>Download QRs ({selectedCount})</span>

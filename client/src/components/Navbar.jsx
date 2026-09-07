@@ -8,7 +8,7 @@ import {
   ChevronDown,
   Info,
   CheckCheck,
-  Radio,
+  QrCode,
   ExternalLink,
   Layers,
   Sparkles,
@@ -28,8 +28,10 @@ export default function Navbar({ onOpenMobileSidebar, title = 'QR Generation & L
   const [notifications, setNotifications] = useState([
     {
       id: 1,
-      title: 'Dynamic QR Engine Online',
-      message: 'All scanned NFC tags and QR codes are resolving dynamically.',
+      title: isSuperAdmin ? 'Dynamic QR Engine Online' : 'QR Management System Active',
+      message: isSuperAdmin
+        ? 'All scanned QR codes are resolving dynamically.'
+        : 'All assigned QR codes are active and ready for configuration.',
       time: 'Just now',
       read: false,
       type: 'system',
@@ -38,7 +40,7 @@ export default function Navbar({ onOpenMobileSidebar, title = 'QR Generation & L
       id: 2,
       title: isSuperAdmin ? 'Ready for QR Generation' : 'Admin Panel Ready',
       message: isSuperAdmin
-        ? 'Click "Generate QRs" to create new batches for card printing.'
+        ? 'Click "Generate QRs" to create new batches for QR printing.'
         : 'Configure your assigned tags with business details & redirect links.',
       time: '10m ago',
       read: false,
@@ -100,31 +102,33 @@ export default function Navbar({ onOpenMobileSidebar, title = 'QR Generation & L
       </div>
 
       <div className="flex items-center gap-3 sm:gap-4">
-        {/* Dynamic Domain Indicator with interactive tooltip */}
-        <div className="relative hidden md:block">
-          <button
-            onMouseEnter={() => setShowDomainTooltip(true)}
-            onMouseLeave={() => setShowDomainTooltip(false)}
-            onClick={() => isSuperAdmin && navigate('/settings')}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 hover:border-black rounded-md text-xs font-medium text-slate-700 cursor-pointer transition-colors"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Dynamic Engine</span>
-            <Info className="w-3 h-3 text-slate-400 ml-0.5" />
-          </button>
+        {/* Dynamic Domain Indicator with interactive tooltip (SuperAdmin only) */}
+        {isSuperAdmin && (
+          <div className="relative hidden md:block">
+            <button
+              onMouseEnter={() => setShowDomainTooltip(true)}
+              onMouseLeave={() => setShowDomainTooltip(false)}
+              onClick={() => navigate('/settings')}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 hover:border-black rounded-md text-xs font-medium text-slate-700 cursor-pointer transition-colors"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Dynamic Engine</span>
+              <Info className="w-3 h-3 text-slate-400 ml-0.5" />
+            </button>
 
-          {showDomainTooltip && (
-            <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-black text-white text-[11px] rounded-xl shadow-2xl z-50 pointer-events-none animate-fade-in border border-zinc-800 whitespace-normal break-words leading-relaxed">
-              <p className="font-bold mb-1 flex items-center gap-1.5 text-white">
-                <Radio className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>Dynamic QR Base Domain</span>
-              </p>
-              <p className="text-zinc-300 leading-relaxed">
-                NFC card links and QRs adapt to your domain automatically. Super Admin can override this in Settings.
-              </p>
-            </div>
-          )}
-        </div>
+            {showDomainTooltip && (
+              <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-black text-white text-[11px] rounded-xl shadow-2xl z-50 pointer-events-none animate-fade-in border border-zinc-800 whitespace-normal break-words leading-relaxed">
+                <p className="font-bold mb-1 flex items-center gap-1.5 text-white">
+                  <QrCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Dynamic QR Base Domain</span>
+                </p>
+                <p className="text-zinc-300 leading-relaxed">
+                  QR links adapt to your domain automatically. Super Admin can override this in Settings.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Working Interactive Notifications Icon & Popover */}
         <div className="relative" ref={notifRef}>
@@ -183,7 +187,7 @@ export default function Navbar({ onOpenMobileSidebar, title = 'QR Generation & L
 
               <div className="p-2.5 bg-slate-50 border-t border-slate-100 text-center">
                 <span className="text-[10px] text-slate-400 font-medium">
-                  CustomCliq Smart NFC Alert System
+                  CustomCliq Smart QR Alert System
                 </span>
               </div>
             </div>

@@ -354,7 +354,7 @@ export default function QrScanModal({
                 </span>
               </h2>
               <p className="text-[11px] text-zinc-400">
-                Scan NFC tag or QR code to find cards instantly
+                Scan QR code to find QRs instantly
               </p>
             </div>
           </div>
@@ -405,7 +405,7 @@ export default function QrScanModal({
         {/* Modal Main Body */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-center min-h-[320px]">
           {/* ============================================================ */}
-          {/* STATE 1: SCAN RESULT FOUND CARD                              */}
+          {/* STATE 1: SCAN RESULT FOUND QR                                */}
           {/* ============================================================ */}
           {scannedResult ? (
             <div className="space-y-4 animate-scale-in">
@@ -456,7 +456,7 @@ export default function QrScanModal({
                 {lookupLoading ? (
                   <div className="py-3 flex items-center justify-center gap-2 text-xs text-zinc-400">
                     <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
-                    <span>Fetching live card info from server...</span>
+                    <span>Fetching live QR info from server...</span>
                   </div>
                 ) : matchedLink ? (
                   <div className="space-y-2 pt-1 text-xs text-zinc-300 divide-y divide-zinc-800/80">
@@ -705,7 +705,7 @@ export default function QrScanModal({
 
               <div className="text-center">
                 <span className="text-[11px] text-zinc-500">
-                  Tip: You can take a photo of any smart card, standee, or batch QR and upload it here.
+                  Tip: You can take a photo of any QR code, standee, or batch QR and upload it here.
                 </span>
               </div>
             </div>
