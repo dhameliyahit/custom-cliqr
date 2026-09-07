@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { X, Download, Copy, Check, QrCode } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { downloadSingleQrSvg } from '../services/api';
 
 export default function QrPreviewModal({ isOpen, onClose, link }) {
   const [copied, setCopied] = useState(false);
@@ -36,25 +37,30 @@ export default function QrPreviewModal({ isOpen, onClose, link }) {
     toast.success('Downloaded High-Res PNG (1000px)');
   };
 
-  // Download Vector SVG with centered code below for print
-  const downloadSvg = () => {
+  // Download Vector SVG with centered code below for print (CorelDRAW / Illustrator optimized)
+  const downloadSvg = async () => {
+    if (link._id) {
+      try {
+        await downloadSingleQrSvg(link._id, link.code);
+        toast.success('Downloaded Print-Ready Vector SVG');
+        return;
+      } catch (err) {
+        console.warn('Backend SVG download failed, generating client-side fallback:', err);
+      }
+    }
+
+    // Client-side fallback: generate clean compound path without nested <svg> tags
     const svgElement = document.getElementById('qr-svg-download');
     if (!svgElement) {
       toast.error('SVG not found');
       return;
     }
 
-    let innerSvg = svgElement.innerHTML;
-    // Ensure clean inner content without duplicate outer <svg> or </svg>
-    const startIdx = innerSvg.indexOf('>');
-    const endIdx = innerSvg.lastIndexOf('</svg>');
-    if (innerSvg.startsWith('<svg') && startIdx !== -1 && endIdx !== -1) {
-      innerSvg = innerSvg.substring(startIdx + 1, endIdx).trim();
-    } else {
-      innerSvg = innerSvg.replace(/<\/svg>[\s\r\n]*$/i, '').trim();
-    }
-
-    const viewBox = svgElement.getAttribute('viewBox') || '0 0 33 33';
+    const paths = svgElement.querySelectorAll('path');
+    const fgPath = paths.length > 1 ? paths[1].getAttribute('d') : '';
+    const viewBoxAttr = svgElement.getAttribute('viewBox') || '0 0 37 37';
+    const [, , vbWidth] = viewBoxAttr.split(' ').map(Number);
+    const numCells = vbWidth || 37;
 
     const width = 600;
     const height = 610;
@@ -62,15 +68,18 @@ export default function QrPreviewModal({ isOpen, onClose, link }) {
     const qrX = 50;
     const qrY = 35;
     const textY = 565;
+    const scale = Number((qrSize / numCells).toFixed(4));
 
     const printableSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="100%" height="100%" fill="#ffffff"/>
-  <svg x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" viewBox="${viewBox}" shape-rendering="crispEdges">
-    ${innerSvg}
-  </svg>
-  <!-- Centered Short Code below QR -->
-  <text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="central" font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, monospace, sans-serif" font-size="34" font-weight="900" fill="#000000" letter-spacing="4">${link.code}</text>
+  <g id="CustomCliq-Printable-QR">
+    <rect width="100%" height="100%" fill="#ffffff"/>
+    <g transform="translate(${qrX}, ${qrY}) scale(${scale})">
+      <path id="qr-matrix" fill="#000000" d="${fgPath}"/>
+    </g>
+    <!-- Centered Short Code below QR -->
+    <text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="central" font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, monospace, sans-serif" font-size="34" font-weight="900" fill="#000000" letter-spacing="4">${link.code}</text>
+  </g>
 </svg>`;
 
     const svgBlob = new Blob([printableSvg], { type: 'image/svg+xml;charset=utf-8' });

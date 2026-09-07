@@ -49,22 +49,16 @@ const getQrBaseDomain = async (req) => {
 };
 
 // Helper to generate print-ready vector SVG containing QR code + centered short code below it
+// Optimized for CorelDRAW, Illustrator, Plotters, and CNC laser engraving:
+// - Closed filled compound path (fill="#000000", stroke="none")
+// - Eliminates broken/movable individual stroke lines
+// - No nested <svg> elements (ensures single coordinate space across all vector editors)
+// - Grouped under <g id="CustomCliq-Printable-QR"> so elements select & move as a complete object
 const generatePrintableQrSvg = async (targetUrl, code) => {
-  const qrSvg = await QRCode.toString(targetUrl, {
-    type: 'svg',
-    margin: 1,
-    color: { dark: '#000000', light: '#ffffff' },
-  });
-
-  const viewBoxMatch = qrSvg.match(/viewBox="([^"]+)"/);
-  const viewBox = viewBoxMatch ? viewBoxMatch[1] : '0 0 33 33';
-
-  // Extract only the inner paths between <svg...> and </svg> to prevent duplicate closing tags
-  const startIdx = qrSvg.indexOf('>');
-  const endIdx = qrSvg.lastIndexOf('</svg>');
-  const innerContent = (startIdx !== -1 && endIdx !== -1)
-    ? qrSvg.substring(startIdx + 1, endIdx).trim()
-    : qrSvg.replace(/^<svg[^>]*>/i, '').replace(/<\/svg>[\s\r\n]*$/i, '').trim();
+  const qr = QRCode.create(targetUrl, { errorCorrectionLevel: 'M' });
+  const size = qr.modules.size;
+  const margin = 1;
+  const totalModules = size + margin * 2;
 
   const width = 600;
   const height = 610;
@@ -72,15 +66,37 @@ const generatePrintableQrSvg = async (targetUrl, code) => {
   const qrX = (width - qrSize) / 2; // 50
   const qrY = 35;
   const textY = 565;
+  const scale = qrSize / totalModules;
+
+  let pathD = '';
+  for (let r = 0; r < size; r++) {
+    let c = 0;
+    while (c < size) {
+      if (qr.modules.get(r, c)) {
+        const start = c;
+        while (c < size && qr.modules.get(r, c)) {
+          c++;
+        }
+        const len = c - start;
+        const x = Number((qrX + (start + margin) * scale).toFixed(3));
+        const y = Number((qrY + (r + margin) * scale).toFixed(3));
+        const w = Number((len * scale).toFixed(3));
+        const h = Number(scale.toFixed(3));
+        pathD += `M${x} ${y}h${w}v${h}h-${w}z`;
+      } else {
+        c++;
+      }
+    }
+  }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="100%" height="100%" fill="#ffffff"/>
-  <svg x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" viewBox="${viewBox}" shape-rendering="crispEdges">
-    ${innerContent}
-  </svg>
-  <!-- Centered Short Code below QR for clear identification on print/standees -->
-  <text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="central" font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, monospace, sans-serif" font-size="34" font-weight="900" fill="#000000" letter-spacing="4">${code}</text>
+  <g id="CustomCliq-Printable-QR">
+    <rect width="100%" height="100%" fill="#ffffff"/>
+    <path id="qr-matrix" fill="#000000" d="${pathD}"/>
+    <!-- Centered Short Code below QR for clear identification on print/standees -->
+    <text x="${width / 2}" y="${textY}" text-anchor="middle" dominant-baseline="central" font-family="'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, monospace, sans-serif" font-size="34" font-weight="900" fill="#000000" letter-spacing="4">${code}</text>
+  </g>
 </svg>`;
 };
 

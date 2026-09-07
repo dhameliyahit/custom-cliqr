@@ -155,9 +155,25 @@ export const testGoogleSheet = async (webhookUrl) => {
   return response.data;
 };
 
+export const downloadSingleQrSvg = async (linkId, code) => {
+  const response = await api.get(`/qr/${linkId}/image?format=svg`, {
+    responseType: 'blob',
+  });
+  const blob = new Blob([response.data], { type: 'image/svg+xml' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `CustomCliq_${code}.svg`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 export const syncAllToGoogleSheet = async (webhookUrl) => {
   const response = await api.post('/qr/google-sheet/sync-all', { webhookUrl });
   return response.data;
 };
 
 export default api;
+
