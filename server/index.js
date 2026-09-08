@@ -1,10 +1,21 @@
+const path = require('path');
+const fs = require('fs');
+
+// Support .env in root directory (common on Hostinger/cPanel) or inside server/
+const rootEnvPath = path.resolve(__dirname, '../.env');
+const serverEnvPath = path.resolve(__dirname, '.env');
+if (fs.existsSync(rootEnvPath)) {
+  require('dotenv').config({ path: rootEnvPath });
+}
+if (fs.existsSync(serverEnvPath)) {
+  require('dotenv').config({ path: serverEnvPath });
+}
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const compression = require('compression');
-const path = require('path');
-const fs = require('fs');
 const connectDB = require('./config/db');
 
 // Route imports
@@ -106,3 +117,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`[CustomCliq Server]: Running on http://localhost:${PORT}`);
 });
+
+module.exports = app;

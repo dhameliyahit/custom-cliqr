@@ -29,8 +29,9 @@ jspm_packages/
 .stylelintcache
 
 # Build directories
-client/dist/
-dist/
+# client/dist/ is tracked so Hostinger shared hosting can serve the pre-built app directly without needing vite/build tools
+# client/dist/
+# dist/
 
 # Environment files
 .env
