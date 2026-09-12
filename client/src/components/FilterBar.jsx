@@ -5,6 +5,7 @@ export default function FilterBar({
   filters,
   onFilterChange,
   admins = [],
+  batches = [],
   selectedCount = 0,
   onOpenAssignModal,
   onDeleteSelected,
@@ -53,6 +54,29 @@ export default function FilterBar({
           </div>
         )}
 
+        {/* Batch Filter */}
+        {(batches.length > 0 || (filters.batchCode && filters.batchCode !== 'all')) && (
+          <div className="w-full sm:w-auto min-w-[170px]">
+            <select
+              value={filters.batchCode || 'all'}
+              onChange={(e) => onFilterChange('batchCode', e.target.value)}
+              className="w-full h-10 px-3 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm font-medium text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all cursor-pointer shadow-2xs"
+            >
+              <option value="all">Batch Filter (All)</option>
+              {filters.batchCode &&
+                filters.batchCode !== 'all' &&
+                !batches.some((b) => b.batchCode === filters.batchCode) && (
+                  <option value={filters.batchCode}>{filters.batchCode}</option>
+                )}
+              {batches.map((b) => (
+                <option key={b._id} value={b.batchCode}>
+                  {b.batchCode}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Status Filter */}
         <div className="w-full sm:w-auto min-w-[140px]">
           <select
@@ -77,7 +101,7 @@ export default function FilterBar({
               placeholder="Search by QR code, Batch, Customer..."
               value={filters.search || ''}
               onChange={(e) => onFilterChange('search', e.target.value)}
-              className="w-full h-10 pl-9 pr-24 bg-white border border-slate-300 rounded-lg text-xs sm:text-sm font-medium text-black placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all shadow-2xs"
+              className="input-base input-search pr-24 shadow-2xs"
             />
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {filters.search && (

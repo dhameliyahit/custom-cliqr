@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, RefreshCw, QrCode, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api, { downloadExportFile } from '../services/api';
@@ -15,6 +16,9 @@ import toast from 'react-hot-toast';
 
 export default function Dashboard() {
   const { isSuperAdmin } = useAuth();
+  const [searchParams] = useSearchParams();
+  const urlBatchCode = searchParams.get('batchCode') || '';
+  const urlAdminId = searchParams.get('adminId') || '';
 
   // State
   const [links, setLinks] = useState([]);
@@ -29,11 +33,26 @@ export default function Dashboard() {
 
   // Filters matching user wireframe
   const [filters, setFilters] = useState({
-    period: 'this_month',
-    adminId: 'all',
+    period: urlBatchCode || urlAdminId ? 'all' : 'this_month',
+    adminId: urlAdminId || 'all',
+    batchCode: urlBatchCode || 'all',
     status: 'all',
     search: '',
   });
+
+  // Sync from URL search parameters on route navigation
+  useEffect(() => {
+    const qBatch = searchParams.get('batchCode');
+    const qAdmin = searchParams.get('adminId');
+    if (qBatch || qAdmin) {
+      setFilters((prev) => ({
+        ...prev,
+        period: 'all',
+        batchCode: qBatch || prev.batchCode || 'all',
+        adminId: qAdmin || prev.adminId || 'all',
+      }));
+    }
+  }, [searchParams]);
 
   // Pagination matching user wireframe (Prev [1] [2] [3] Next)
   const [pagination, setPagination] = useState({
@@ -62,6 +81,7 @@ export default function Dashboard() {
         limit: pagination.limit,
         period: filters.period,
         adminId: filters.adminId,
+        batchCode: filters.batchCode !== 'all' ? filters.batchCode : undefined,
         status: filters.status,
         search: filters.search,
       };
@@ -379,6 +399,7 @@ export default function Dashboard() {
         filters={filters}
         onFilterChange={handleFilterChange}
         admins={admins}
+        batches={batches}
         selectedCount={selectedIds.length}
         onOpenAssignModal={() => setIsAssignOpen(true)}
         onDeleteSelected={handleDeleteSelected}

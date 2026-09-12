@@ -78,16 +78,15 @@ export default function PublicRedirect() {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full mx-auto my-auto">
         {/* Brand */}
-        <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center shadow-md">
-            <QrCode className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black tracking-tight text-black">CustomCliq</h1>
-            <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
-              Smart QR Platform
-            </p>
-          </div>
+        <div className="flex flex-col items-center justify-center mb-8 text-center">
+          <img
+            src="/logos/3.svg"
+            alt="CustomCliq"
+            className="h-8 w-auto object-contain mb-1"
+          />
+          <p className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+            Smart QR Platform
+          </p>
         </div>
 
         {/* QR Status Container */}
@@ -151,8 +150,9 @@ export default function PublicRedirect() {
       </div>
 
       {/* Footer */}
-      <div className="text-center text-xs text-slate-400 font-medium mt-8">
-        Powered by <span className="font-bold text-black">CustomCliq</span> • Smart QR Solutions
+      <div className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-400 font-medium mt-8">
+        <img src="/logos/1.svg" alt="" className="w-3.5 h-3.5 object-contain inline-block" />
+        <span>Powered by <strong className="text-black font-semibold">CustomCliq</strong> • Smart QR Solutions</span>
       </div>
     </div>
   );

@@ -51,19 +51,13 @@ export default function Sidebar({ isOpen, onClose }) {
       >
         <div>
           {/* Brand Header */}
-          <div className="h-16 px-6 border-b border-slate-200 flex items-center justify-between shrink-0">
-            <Link to="/" className="flex items-center gap-3 group cursor-pointer" onClick={() => onClose && onClose()}>
-              <div className="w-9 h-9 rounded-lg bg-black text-white flex items-center justify-center font-bold shadow-xs group-hover:scale-105 transition-transform">
-                <QrCode className="w-5 h-5 text-white" />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-extrabold text-lg tracking-tight text-black leading-none">
-                  CustomCliq
-                </span>
-                <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mt-0.5">
-                  Smart QR Platform
-                </span>
-              </div>
+          <div className="h-16 px-5 border-b border-slate-200 flex items-center justify-between shrink-0">
+            <Link to="/" className="flex items-center group cursor-pointer" onClick={() => onClose && onClose()}>
+              <img
+                src="/logos/3.svg"
+                alt="CustomCliq"
+                className="h-7 w-auto max-w-[170px] object-contain group-hover:opacity-85 transition-opacity"
+              />
             </Link>
 
             {/* Mobile close button */}
@@ -88,11 +82,7 @@ export default function Sidebar({ isOpen, onClose }) {
                     key={item.name}
                     to={item.path}
                     onClick={() => onClose && onClose()}
-                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium cursor-pointer transition-all ${
-                      isActive
-                        ? 'bg-slate-100 text-black border-l-4 border-black font-semibold shadow-2xs'
-                        : 'text-slate-600 hover:text-black hover:bg-slate-50'
-                    }`}
+                    className={`sidebar-link ${isActive ? 'sidebar-link-active' : ''}`}
                   >
                     <Icon
                       className={`w-4 h-4 ${

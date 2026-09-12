@@ -91,11 +91,18 @@ export default function Navbar({ onOpenMobileSidebar, title = 'QR Generation & L
           <Menu className="w-5 h-5" />
         </button>
 
+        {/* Brand Logo Mark for mobile */}
+        <img
+          src="/logos/1.svg"
+          alt="CustomCliq"
+          className="w-7 h-7 object-contain lg:hidden shrink-0"
+        />
+
         <div className="flex items-center gap-2">
           <h1 className="text-base sm:text-lg font-bold text-black tracking-tight">
             {title}
           </h1>
-          <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-black text-white uppercase tracking-wider">
+          <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-brand-navy text-white uppercase tracking-wider">
             {isSuperAdmin ? 'Super Admin' : 'Admin'}
           </span>
         </div>
@@ -111,7 +118,7 @@ export default function Navbar({ onOpenMobileSidebar, title = 'QR Generation & L
               onClick={() => navigate('/settings')}
               className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 hover:border-black rounded-md text-xs font-medium text-slate-700 cursor-pointer transition-colors"
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-brand-teal animate-pulse"></span>
               <span>Dynamic Engine</span>
               <Info className="w-3 h-3 text-slate-400 ml-0.5" />
             </button>

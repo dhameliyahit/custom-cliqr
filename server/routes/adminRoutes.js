@@ -6,6 +6,7 @@ const { verifyAccessToken, requireSuperAdmin } = require('../middleware/auth');
 router.use(verifyAccessToken, requireSuperAdmin);
 
 router.get('/', adminController.getAllAdmins);
+router.get('/:id/details', adminController.getAdminDetails);
 router.post('/', adminController.createAdmin);
 router.put('/:id', adminController.updateAdmin);
 router.delete('/:id', adminController.deleteAdmin);

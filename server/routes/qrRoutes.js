@@ -19,6 +19,7 @@ router.get('/stats', qrController.getDashboardStats);
 // Batch & QR listing
 router.get('/', qrController.getQrLinks);
 router.get('/batches', qrController.getBatches);
+router.get('/batches/:batchCode/details', requireSuperAdmin, qrController.getBatchDetails);
 router.get('/export', qrController.exportQrData);
 router.get('/:id/download', qrController.downloadQrCode);
 

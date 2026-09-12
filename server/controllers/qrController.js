@@ -329,7 +329,7 @@ exports.getQrLinks = async (req, res) => {
   }
 };
 
-// @desc    Get All Batches with counts
+// @desc    Get All Batches with counts & aggregate KPIs
 // @route   GET /api/qr/batches
 exports.getBatches = async (req, res) => {
   try {
@@ -352,26 +352,170 @@ exports.getBatches = async (req, res) => {
           { $group: { _id: null, total: { $sum: '$scanCount' } } },
         ]);
 
+        const totalScans = scans[0]?.total || 0;
+        const unassigned = total - assigned;
+
         return {
           ...batch,
           totalCount: total,
           assignedCount: assigned,
-          unassignedCount: total - assigned,
+          unassignedCount: unassigned > 0 ? unassigned : 0,
           configuredCount: configured,
-          totalScans: scans[0]?.total || 0,
+          totalScans,
+          sellThroughRate: assigned > 0 ? Number(((configured / assigned) * 100).toFixed(1)) : 0,
         };
       })
     );
 
+    // Calculate aggregate KPIs
+    let totalVolume = 0;
+    let totalAssigned = 0;
+    let totalUnassigned = 0;
+    let totalConfigured = 0;
+    let totalScans = 0;
+
+    batchesWithCounts.forEach((b) => {
+      totalVolume += b.totalCount || 0;
+      totalAssigned += b.assignedCount || 0;
+      totalUnassigned += b.unassignedCount || 0;
+      totalConfigured += b.configuredCount || 0;
+      totalScans += b.totalScans || 0;
+    });
+
+    const kpis = {
+      totalBatches: batchesWithCounts.length,
+      totalVolume,
+      totalAssigned,
+      totalUnassigned,
+      totalConfigured,
+      totalScans,
+      overallAllocationRate: totalVolume > 0 ? Number(((totalAssigned / totalVolume) * 100).toFixed(1)) : 0,
+      overallActivationRate: totalVolume > 0 ? Number(((totalConfigured / totalVolume) * 100).toFixed(1)) : 0,
+    };
+
     return res.status(200).json({
       success: true,
       batches: batchesWithCounts,
+      kpis,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve batches',
       error: error.message,
+    });
+  }
+};
+
+// @desc    Get Detailed Batch Metrics & Admin Allocations
+// @route   GET /api/qr/batches/:batchCode/details
+exports.getBatchDetails = async (req, res) => {
+  try {
+    const { batchCode } = req.params;
+    if (!batchCode) {
+      return res.status(400).json({ success: false, message: 'Batch code is required' });
+    }
+
+    const cleanBatchCode = batchCode.toUpperCase().trim();
+    const batch = await Batch.findOne({ batchCode: cleanBatchCode })
+      .populate('createdBy', 'name email')
+      .lean();
+
+    if (!batch) {
+      return res.status(404).json({ success: false, message: 'Batch not found' });
+    }
+
+    // Status counts aggregation
+    const statusAgg = await QrLink.aggregate([
+      { $match: { batchCode: cleanBatchCode } },
+      { $group: { _id: '$status', count: { $sum: 1 }, totalScans: { $sum: '$scanCount' } } },
+    ]);
+
+    const statusCounts = {
+      unassigned: 0,
+      assigned: 0,
+      configured: 0,
+      inactive: 0,
+      total: 0,
+      totalScans: 0,
+    };
+
+    statusAgg.forEach((s) => {
+      if (statusCounts[s._id] !== undefined) {
+        statusCounts[s._id] = s.count;
+      }
+      statusCounts.total += s.count;
+      statusCounts.totalScans += s.totalScans || 0;
+    });
+
+    // Admin breakdown: which Admins hold links from this batch
+    const adminAgg = await QrLink.aggregate([
+      { $match: { batchCode: cleanBatchCode, assignedTo: { $ne: null } } },
+      {
+        $group: {
+          _id: '$assignedTo',
+          totalAllocated: { $sum: 1 },
+          configuredCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'configured'] }, 1, 0] },
+          },
+          totalScans: { $sum: '$scanCount' },
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'adminUser',
+        },
+      },
+      { $unwind: { path: '$adminUser', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          adminId: '$_id',
+          name: '$adminUser.name',
+          email: '$adminUser.email',
+          phone: '$adminUser.phone',
+          company: '$adminUser.company',
+          status: '$adminUser.status',
+          totalAllocated: 1,
+          configuredCount: 1,
+          availableCount: { $subtract: ['$totalAllocated', '$configuredCount'] },
+          totalScans: 1,
+        },
+      },
+      { $sort: { totalAllocated: -1 } },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      batch: {
+        ...batch,
+        totalCount: statusCounts.total,
+        assignedCount: statusCounts.total - statusCounts.unassigned,
+        unassignedCount: statusCounts.unassigned,
+        configuredCount: statusCounts.configured,
+        inactiveCount: statusCounts.inactive,
+        totalScans: statusCounts.totalScans,
+        sellThroughRate:
+          statusCounts.total - statusCounts.unassigned > 0
+            ? Number(
+                (
+                  (statusCounts.configured /
+                    (statusCounts.total - statusCounts.unassigned)) *
+                  100
+                ).toFixed(1)
+              )
+            : 0,
+      },
+      statusCounts,
+      adminBreakdown: adminAgg,
+    });
+  } catch (error) {
+    console.error('Batch details error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve batch details: ' + error.message,
     });
   }
 };

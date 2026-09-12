@@ -31,14 +31,44 @@ exports.getAllAdmins = async (req, res) => {
           configuredCount: configured,
           availableCount: assigned - configured,
           totalScans: totalScans[0]?.total || 0,
+          sellThroughRate: assigned > 0 ? Number(((configured / assigned) * 100).toFixed(1)) : 0,
           createdAt: admin.createdAt,
         };
       })
     );
 
+    // Calculate aggregate KPIs across all reseller admins
+    let totalAllocated = 0;
+    let totalConfigured = 0;
+    let totalAvailable = 0;
+    let totalScans = 0;
+    let activeAdmins = 0;
+    let blockedAdmins = 0;
+
+    adminList.forEach((a) => {
+      totalAllocated += a.assignedCount || 0;
+      totalConfigured += a.configuredCount || 0;
+      totalAvailable += a.availableCount || 0;
+      totalScans += a.totalScans || 0;
+      if (a.status === 'active') activeAdmins++;
+      else blockedAdmins++;
+    });
+
+    const kpis = {
+      totalAdmins: adminList.length,
+      activeAdmins,
+      blockedAdmins,
+      totalAllocated,
+      totalConfigured,
+      totalAvailable,
+      totalScans,
+      avgSellThroughRate: totalAllocated > 0 ? Number(((totalConfigured / totalAllocated) * 100).toFixed(1)) : 0,
+    };
+
     return res.status(200).json({
       success: true,
       admins: adminList,
+      kpis,
     });
   } catch (error) {
     console.error('Fetch admins error:', error);
@@ -166,6 +196,109 @@ exports.deleteAdmin = async (req, res) => {
       success: false,
       message: 'Failed to delete admin',
       error: error.message,
+    });
+  }
+};
+
+// @desc    Get Detailed Admin Stats & Batch Distribution
+// @route   GET /api/admins/:id/details
+exports.getAdminDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const admin = await User.findOne({ _id: id, role: 'admin' }).select('-password').lean();
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    // Status breakdown
+    const statusAgg = await QrLink.aggregate([
+      { $match: { assignedTo: admin._id } },
+      { $group: { _id: '$status', count: { $sum: 1 }, totalScans: { $sum: '$scanCount' } } },
+    ]);
+
+    const statusCounts = {
+      assigned: 0,
+      configured: 0,
+      inactive: 0,
+      total: 0,
+      totalScans: 0,
+    };
+
+    statusAgg.forEach((s) => {
+      if (statusCounts[s._id] !== undefined) {
+        statusCounts[s._id] = s.count;
+      }
+      statusCounts.total += s.count;
+      statusCounts.totalScans += s.totalScans || 0;
+    });
+
+    // Batch distribution: which Batches this admin has links from
+    const batchAgg = await QrLink.aggregate([
+      { $match: { assignedTo: admin._id } },
+      {
+        $group: {
+          _id: '$batchCode',
+          totalAllocated: { $sum: 1 },
+          configuredCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'configured'] }, 1, 0] },
+          },
+          totalScans: { $sum: '$scanCount' },
+        },
+      },
+      {
+        $lookup: {
+          from: 'batches',
+          localField: '_id',
+          foreignField: 'batchCode',
+          as: 'batchInfo',
+        },
+      },
+      { $unwind: { path: '$batchInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          batchCode: '$_id',
+          description: '$batchInfo.description',
+          createdAt: '$batchInfo.createdAt',
+          totalAllocated: 1,
+          configuredCount: 1,
+          availableCount: { $subtract: ['$totalAllocated', '$configuredCount'] },
+          totalScans: 1,
+        },
+      },
+      { $sort: { totalAllocated: -1 } },
+    ]);
+
+    const batchBreakdown = batchAgg.map((b) => ({
+      ...b,
+      sellThroughRate:
+        b.totalAllocated > 0
+          ? Number(((b.configuredCount / b.totalAllocated) * 100).toFixed(1))
+          : 0,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      admin: {
+        ...admin,
+        assignedCount: statusCounts.total,
+        configuredCount: statusCounts.configured,
+        availableCount: statusCounts.total - statusCounts.configured,
+        inactiveCount: statusCounts.inactive,
+        totalScans: statusCounts.totalScans,
+        sellThroughRate:
+          statusCounts.total > 0
+            ? Number(((statusCounts.configured / statusCounts.total) * 100).toFixed(1))
+            : 0,
+      },
+      statusCounts,
+      batchBreakdown,
+    });
+  } catch (error) {
+    console.error('Admin details error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve admin details: ' + error.message,
     });
   }
 };

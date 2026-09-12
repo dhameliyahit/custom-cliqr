@@ -180,5 +180,15 @@ export const verifyDomainReachability = async (domain) => {
   return response.data;
 };
 
+export const getBatchDetails = async (batchCode) => {
+  const response = await api.get(`/qr/batches/${encodeURIComponent(batchCode)}/details`);
+  return response.data;
+};
+
+export const getAdminDetails = async (adminId) => {
+  const response = await api.get(`/admins/${adminId}/details`);
+  return response.data;
+};
+
 export default api;
 
