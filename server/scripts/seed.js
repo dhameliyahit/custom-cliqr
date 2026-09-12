@@ -36,10 +36,10 @@ const seed = async () => {
     await superAdmin.save();
     console.log('[Seed] SuperAdmin configured with:', email);
 
-    // Default settings
+    // Default settings (empty qr_base_domain enables safe automatic current host detection)
     await Setting.findOneAndUpdate(
       { key: 'qr_base_domain' },
-      { key: 'qr_base_domain', value: 'http://localhost:5173', description: 'Dynamic QR / NFC Base Domain' },
+      { key: 'qr_base_domain', value: '', description: 'Dynamic QR / NFC Base Domain (empty for auto current host)' },
       { upsert: true }
     );
 

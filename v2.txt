@@ -1,0 +1,6 @@
+superadmin side
+1. admin / batch dashboard fullimprove deatils and filter
+2. code expiry 
+3. if exiy admin soona dn with lengy evry tme check instand so simple think nad if expiry done then invaie and only superadmin can active if all fine
+
+4. 

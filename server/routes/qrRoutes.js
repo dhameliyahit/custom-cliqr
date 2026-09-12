@@ -30,6 +30,7 @@ router.post('/generate', requireSuperAdmin, qrController.generateBatch);
 router.post('/assign', requireSuperAdmin, qrController.assignLinks);
 router.get('/settings', requireSuperAdmin, qrController.getSettings);
 router.put('/settings', requireSuperAdmin, qrController.updateSettings);
+router.post('/settings/verify-domain', requireSuperAdmin, qrController.verifyDomainReachability);
 
 // Google Sheet Live Lead Sync routes (Super Admin only)
 router.post('/google-sheet/test', requireSuperAdmin, qrController.testGoogleSheet);

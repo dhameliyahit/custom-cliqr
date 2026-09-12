@@ -120,10 +120,10 @@ export default function Navbar({ onOpenMobileSidebar, title = 'QR Generation & L
               <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-black text-white text-[11px] rounded-xl shadow-2xl z-50 pointer-events-none animate-fade-in border border-zinc-800 whitespace-normal break-words leading-relaxed">
                 <p className="font-bold mb-1 flex items-center gap-1.5 text-white">
                   <QrCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>Dynamic QR Base Domain</span>
+                  <span>QR Engine Domain</span>
                 </p>
                 <p className="text-zinc-300 leading-relaxed">
-                  QR links adapt to your domain automatically. Super Admin can override this in Settings.
+                  QR links use the active server host by default so all scans hit your server. You can configure and verify custom domains in Settings.
                 </p>
               </div>
             )}

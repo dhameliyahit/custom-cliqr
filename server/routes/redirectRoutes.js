@@ -7,12 +7,21 @@ const { getCachedRedirect, setCachedRedirect } = require('../services/redirectCa
 
 // Helper to determine client URL (smart fallback for unified server vs separate dev servers)
 const getClientUrl = (req) => {
-  if (process.env.CLIENT_URL && process.env.CLIENT_URL !== 'http://localhost:5173') {
+  if (process.env.CLIENT_URL && !process.env.CLIENT_URL.includes('localhost')) {
     return process.env.CLIENT_URL;
   }
   const clientDist = path.join(__dirname, '../../client/dist/index.html');
   if (fs.existsSync(clientDist)) {
-    return `${req.protocol}://${req.get('host')}`;
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    return `${proto}://${host}`;
+  }
+  if (req) {
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    if (host && !host.includes('localhost')) {
+      return `${proto}://${host}`;
+    }
   }
   return process.env.CLIENT_URL || 'http://localhost:5173';
 };

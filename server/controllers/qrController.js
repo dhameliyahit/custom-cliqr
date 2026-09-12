@@ -1,4 +1,7 @@
 const crypto = require('crypto');
+const dns = require('dns').promises;
+const http = require('http');
+const https = require('https');
 const QRCode = require('qrcode');
 const XLSX = require('xlsx');
 const archiver = require('archiver');
@@ -32,8 +35,12 @@ const createZipArchive = (options = { zlib: { level: 9 } }) => {
 const getQrBaseDomain = async (req) => {
   try {
     const setting = await Setting.findOne({ key: 'qr_base_domain' });
-    if (setting && setting.value && setting.value.trim() !== '') {
-      return setting.value.trim().replace(/\/+$/, '');
+    if (setting && setting.value && setting.value.trim() !== '' && setting.value.trim().toLowerCase() !== 'auto') {
+      let val = setting.value.trim().replace(/\/+$/, '');
+      if (!val.match(/^https?:\/\//i)) {
+        val = `https://${val}`;
+      }
+      return val;
     }
   } catch (err) {
     console.error('Error fetching qr_base_domain setting:', err);
@@ -41,11 +48,15 @@ const getQrBaseDomain = async (req) => {
 
   // Fallback to request host or env
   if (req) {
-    const host = req.get('host');
-    const protocol = req.protocol || 'http';
-    return `${protocol}://${host}`;
+    const forwardedProto = req.get('x-forwarded-proto');
+    const forwardedHost = req.get('x-forwarded-host');
+    const host = forwardedHost || req.get('host');
+    const protocol = forwardedProto || req.protocol || 'http';
+    if (host) {
+      return `${protocol}://${host}`.replace(/\/+$/, '');
+    }
   }
-  return process.env.DEFAULT_QR_DOMAIN || 'http://localhost:5173';
+  return (process.env.DEFAULT_QR_DOMAIN || 'http://localhost:5173').replace(/\/+$/, '');
 };
 
 // Helper to generate print-ready vector SVG containing QR code + centered short code below it
@@ -817,10 +828,25 @@ exports.getSettings = async (req, res) => {
 
     const activeDomain = await getQrBaseDomain(req);
 
+    // Auto-detected current host domain
+    const forwardedProto = req.get('x-forwarded-proto');
+    const forwardedHost = req.get('x-forwarded-host');
+    const host = forwardedHost || req.get('host');
+    const protocol = forwardedProto || req.protocol || 'http';
+    const currentHostDomain = host ? `${protocol}://${host}`.replace(/\/+$/, '') : 'http://localhost:5173';
+
+    const isCustomDomain = Boolean(
+      settingsMap.qr_base_domain &&
+      settingsMap.qr_base_domain.trim() !== '' &&
+      settingsMap.qr_base_domain.trim().toLowerCase() !== 'auto'
+    );
+
     return res.status(200).json({
       success: true,
       settings: settingsMap,
       activeDomain,
+      currentHostDomain,
+      domainMode: isCustomDomain ? 'custom' : 'current_host',
       googleAppsScriptTemplate: GOOGLE_APPS_SCRIPT_TEMPLATE,
     });
   } catch (error) {
@@ -841,12 +867,22 @@ exports.updateSettings = async (req, res) => {
     } = req.body;
 
     if (qr_base_domain !== undefined) {
+      let cleaned = (qr_base_domain || '').trim();
+      if (cleaned.toLowerCase() === 'auto' || cleaned === '') {
+        cleaned = '';
+      } else {
+        cleaned = cleaned.replace(/\/+$/, '');
+        if (!cleaned.match(/^https?:\/\//i)) {
+          cleaned = `https://${cleaned}`;
+        }
+      }
+
       await Setting.findOneAndUpdate(
         { key: 'qr_base_domain' },
         {
           key: 'qr_base_domain',
-          value: qr_base_domain.trim(),
-          description: 'Base domain for NFC / QR codes',
+          value: cleaned,
+          description: 'Base domain for NFC / QR codes (empty for current host)',
         },
         { upsert: true, new: true }
       );
@@ -889,16 +925,153 @@ exports.updateSettings = async (req, res) => {
     }
 
     const activeDomain = await getQrBaseDomain(req);
+    const forwardedProto = req.get('x-forwarded-proto');
+    const forwardedHost = req.get('x-forwarded-host');
+    const host = forwardedHost || req.get('host');
+    const protocol = forwardedProto || req.protocol || 'http';
+    const currentHostDomain = host ? `${protocol}://${host}`.replace(/\/+$/, '') : 'http://localhost:5173';
 
     return res.status(200).json({
       success: true,
       message: 'System settings updated successfully',
       activeDomain,
+      currentHostDomain,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
       message: 'Failed to update settings',
+    });
+  }
+};
+
+// @desc    Verify Custom Domain DNS resolution and server reachability
+// @route   POST /api/qr/settings/verify-domain
+exports.verifyDomainReachability = async (req, res) => {
+  try {
+    let { domain } = req.body;
+    if (!domain || typeof domain !== 'string' || !domain.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Domain name is required',
+      });
+    }
+
+    let cleanedDomain = domain.trim();
+    if (!cleanedDomain.match(/^https?:\/\//i)) {
+      cleanedDomain = `https://${cleanedDomain}`;
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(cleanedDomain);
+    } catch (e) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid domain format. Example: https://qr.yourbrand.com',
+      });
+    }
+
+    const hostname = parsedUrl.hostname;
+    const protocol = parsedUrl.protocol; // 'http:' or 'https:'
+    const port = parsedUrl.port || (protocol === 'https:' ? 443 : 80);
+
+    // 1. DNS Resolution Check
+    let resolvedIps = [];
+    try {
+      const lookupResult = await dns.lookup(hostname, { all: true });
+      resolvedIps = lookupResult.map((item) => item.address);
+    } catch (dnsErr) {
+      return res.status(200).json({
+        success: false,
+        reachable: false,
+        hostname,
+        errorStep: 'dns',
+        message: `DNS Lookup Failed: The domain "${hostname}" does not resolve to any IP address.`,
+        instructions: `Go to your domain DNS provider (e.g. Cloudflare, GoDaddy, Namecheap) and create a CNAME or A Record pointing to this server IP before activating.`,
+      });
+    }
+
+    // 2. HTTP Server Reachability Probe (Check if /health responds)
+    const probePath = '/health';
+    const clientModule = protocol === 'https:' ? https : http;
+
+    const probeResult = await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        resolve({
+          success: false,
+          errorStep: 'timeout',
+          message: `Connection Timed Out: Server at "${hostname}" did not respond within 6 seconds. Ensure your server firewall / reverse proxy routes traffic on port ${port}.`,
+        });
+      }, 6000);
+
+      const probeReq = clientModule.get(
+        `${protocol}//${hostname}${parsedUrl.port ? `:${parsedUrl.port}` : ''}${probePath}`,
+        {
+          headers: {
+            'User-Agent': 'CustomCliq-Domain-Verifier/2.0',
+            'Accept': 'application/json',
+          },
+          rejectUnauthorized: false, // Allow testing staging/self-signed certs
+        },
+        (probeRes) => {
+          clearTimeout(timer);
+          let data = '';
+          probeRes.on('data', (chunk) => {
+            data += chunk;
+          });
+          probeRes.on('end', () => {
+            let isCustomCliq = false;
+            try {
+              const json = JSON.parse(data);
+              if (json && (json.status === 'healthy' || json.name?.includes('CustomCliq'))) {
+                isCustomCliq = true;
+              }
+            } catch (err) {}
+
+            if (probeRes.statusCode >= 200 && probeRes.statusCode < 400) {
+              resolve({
+                success: true,
+                statusCode: probeRes.statusCode,
+                isCustomCliq,
+                message: isCustomCliq
+                  ? `Domain verified successfully! "${hostname}" resolves to ${resolvedIps[0]} and connects directly to CustomCliq.`
+                  : `Domain responds (HTTP ${probeRes.statusCode}), but did not return CustomCliq health signature. Verify your reverse proxy points to this exact application.`,
+              });
+            } else {
+              resolve({
+                success: false,
+                statusCode: probeRes.statusCode,
+                errorStep: 'status_code',
+                message: `Server reached but responded with HTTP ${probeRes.statusCode}.`,
+              });
+            }
+          });
+        }
+      );
+
+      probeReq.on('error', (err) => {
+        clearTimeout(timer);
+        resolve({
+          success: false,
+          errorStep: 'connection',
+          message: `Could not connect to "${hostname}": ${err.message}. Ensure your web server or reverse proxy is configured for this hostname.`,
+        });
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      reachable: probeResult.success,
+      hostname,
+      resolvedIps,
+      normalizedDomain: `${protocol}//${hostname}${parsedUrl.port ? `:${parsedUrl.port}` : ''}`,
+      details: probeResult,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify domain reachability: ' + error.message,
     });
   }
 };

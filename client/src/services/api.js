@@ -175,5 +175,10 @@ export const syncAllToGoogleSheet = async (webhookUrl) => {
   return response.data;
 };
 
+export const verifyDomainReachability = async (domain) => {
+  const response = await api.post('/qr/settings/verify-domain', { domain });
+  return response.data;
+};
+
 export default api;
 

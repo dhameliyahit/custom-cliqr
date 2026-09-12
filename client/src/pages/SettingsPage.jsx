@@ -15,21 +15,35 @@ import {
   ChevronUp,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   Send,
+  ShieldCheck,
+  RotateCcw,
+  HelpCircle,
+  Link as LinkIcon,
+  Server,
+  ArrowRight,
 } from 'lucide-react';
-import api, { testGoogleSheet, syncAllToGoogleSheet } from '../services/api';
+import api, { testGoogleSheet, syncAllToGoogleSheet, verifyDomainReachability } from '../services/api';
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
   const [qrBaseDomain, setQrBaseDomain] = useState('');
   const [companyName, setCompanyName] = useState('CustomCliq');
   const [activeDetectedDomain, setActiveDetectedDomain] = useState('');
+  const [currentHostDomain, setCurrentHostDomain] = useState('');
+  const [domainMode, setDomainMode] = useState('current_host'); // 'current_host' | 'custom'
   const [googleSheetWebhookUrl, setGoogleSheetWebhookUrl] = useState('');
   const [googleSheetSyncEnabled, setGoogleSheetSyncEnabled] = useState(false);
   const [appsScriptTemplate, setAppsScriptTemplate] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resettingDomain, setResettingDomain] = useState(false);
+  const [verifyingDomain, setVerifyingDomain] = useState(false);
+  const [domainVerificationResult, setDomainVerificationResult] = useState(null);
+  const [showDnsHelp, setShowDnsHelp] = useState(false);
+  const [copiedSampleUrl, setCopiedSampleUrl] = useState(false);
   const [testingSheet, setTestingSheet] = useState(false);
   const [syncingAll, setSyncingAll] = useState(false);
   const [showScriptGuide, setShowScriptGuide] = useState(false);
@@ -40,7 +54,8 @@ export default function SettingsPage() {
     try {
       const { data } = await api.get('/qr/settings');
       if (data.success) {
-        setQrBaseDomain(data.settings?.qr_base_domain || '');
+        const savedDomain = data.settings?.qr_base_domain || '';
+        setQrBaseDomain(savedDomain);
         setCompanyName(data.settings?.company_name || 'CustomCliq');
         setGoogleSheetWebhookUrl(data.settings?.google_sheet_webhook_url || '');
         setGoogleSheetSyncEnabled(
@@ -48,6 +63,8 @@ export default function SettingsPage() {
           data.settings?.google_sheet_sync_enabled === true
         );
         setActiveDetectedDomain(data.activeDomain || window.location.origin);
+        setCurrentHostDomain(data.currentHostDomain || window.location.origin);
+        setDomainMode(data.domainMode === 'custom' && savedDomain ? 'custom' : 'current_host');
         if (data.googleAppsScriptTemplate) {
           setAppsScriptTemplate(data.googleAppsScriptTemplate);
         }
@@ -65,10 +82,17 @@ export default function SettingsPage() {
 
   const handleSave = async (e) => {
     if (e) e.preventDefault();
+
+    if (domainMode === 'custom' && !qrBaseDomain.trim()) {
+      toast.error('Please enter a valid custom domain or switch to Current Host Domain mode.');
+      return;
+    }
+
     setSaving(true);
     try {
+      const domainToSave = domainMode === 'custom' ? qrBaseDomain.trim() : '';
       const { data } = await api.put('/qr/settings', {
-        qr_base_domain: qrBaseDomain.trim(),
+        qr_base_domain: domainToSave,
         company_name: companyName.trim(),
         google_sheet_webhook_url: googleSheetWebhookUrl.trim(),
         google_sheet_sync_enabled: googleSheetSyncEnabled,
@@ -76,12 +100,72 @@ export default function SettingsPage() {
       if (data.success) {
         toast.success(data.message || 'Settings saved successfully!');
         if (data.activeDomain) setActiveDetectedDomain(data.activeDomain);
+        if (data.currentHostDomain) setCurrentHostDomain(data.currentHostDomain);
+        if (domainToSave === '') {
+          setDomainMode('current_host');
+          setQrBaseDomain('');
+        }
       }
     } catch (err) {
       toast.error('Failed to save settings');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleResetToCurrentHost = async () => {
+    setResettingDomain(true);
+    try {
+      const { data } = await api.put('/qr/settings', {
+        qr_base_domain: '',
+      });
+      if (data.success) {
+        setDomainMode('current_host');
+        setQrBaseDomain('');
+        setDomainVerificationResult(null);
+        setActiveDetectedDomain(data.activeDomain || window.location.origin);
+        if (data.currentHostDomain) setCurrentHostDomain(data.currentHostDomain);
+        toast.success('Restored to Current Host domain! All QR codes now hit this server.');
+      }
+    } catch (err) {
+      toast.error('Failed to reset domain');
+    } finally {
+      setResettingDomain(false);
+    }
+  };
+
+  const handleVerifyDomain = async () => {
+    if (!qrBaseDomain.trim()) {
+      toast.error('Please enter a domain to verify (e.g. https://qr.yourbrand.com)');
+      return;
+    }
+    setVerifyingDomain(true);
+    setDomainVerificationResult(null);
+    try {
+      const res = await verifyDomainReachability(qrBaseDomain.trim());
+      setDomainVerificationResult(res);
+      if (res.reachable) {
+        toast.success(res.details?.message || 'Domain verified! Connects directly to this server.');
+      } else {
+        toast.error(res.message || 'Domain does not point to this server yet.');
+      }
+    } catch (err) {
+      const errMsg = err.response?.data?.message || err.message || 'Verification failed';
+      setDomainVerificationResult({
+        reachable: false,
+        message: errMsg,
+      });
+      toast.error(errMsg);
+    } finally {
+      setVerifyingDomain(false);
+    }
+  };
+
+  const handleCopySampleUrl = (url) => {
+    navigator.clipboard.writeText(url);
+    setCopiedSampleUrl(true);
+    toast.success('Sample QR URL copied to clipboard!');
+    setTimeout(() => setCopiedSampleUrl(false), 2000);
   };
 
   const handleTestConnection = async () => {
@@ -132,9 +216,13 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedScript(false), 2500);
   };
 
-  const setDomainExample = (domain) => {
-    setQrBaseDomain(domain);
-  };
+  // Compute the live preview base domain
+  const effectiveDomain =
+    domainMode === 'custom' && qrBaseDomain.trim()
+      ? (qrBaseDomain.trim().match(/^https?:\/\//i) ? qrBaseDomain.trim() : `https://${qrBaseDomain.trim()}`).replace(/\/+$/, '')
+      : (activeDetectedDomain || currentHostDomain || window.location.origin);
+  const sampleQrUrl = `${effectiveDomain}/r/CC-9X7K2P`;
+  const sampleCleanUrl = `${effectiveDomain}/CC-9X7K2P`;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1000px] mx-auto space-y-6">
@@ -155,66 +243,291 @@ export default function SettingsPage() {
           <Globe className="w-5 h-5 text-black" />
           <div>
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-              Dynamic Domain & System Branding
+              QR Engine Domain & System Branding
             </h2>
             <p className="text-xs text-slate-500">
-              Customize the base domain for dynamic QR links and generated exports.
+              Control the domain prefix printed on physical QR stands and used for redirection links.
             </p>
           </div>
         </div>
 
         <form onSubmit={handleSave} className="space-y-6">
-          {/* Active Detected Domain Banner */}
+          {/* Active Domain Live Status Banner */}
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Currently Active QR Engine Domain:
-              </span>
-              <p className="text-base font-mono font-bold text-black mt-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Currently Active QR Engine Domain:
+                </span>
+              </div>
+              <p className="text-base sm:text-lg font-mono font-black text-black mt-0.5">
                 {activeDetectedDomain || window.location.origin}
               </p>
+              <p className="text-[11px] text-slate-500 mt-1">
+                All generated QR codes, camera scans, and dashboard links currently resolve through this URL.
+              </p>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Resolved Dynamically</span>
+            <div className="shrink-0">
+              {domainMode === 'custom' && qrBaseDomain ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 text-white text-xs font-bold rounded-full shadow-xs">
+                  <Globe className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Custom Branded Domain</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-900 text-xs font-bold rounded-full border border-emerald-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Host Domain (Safe & Verified)</span>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Custom QR Base Domain */}
+          {/* Domain Strategy Selector */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Globe className="w-4 h-4 text-black" />
-                <span>Custom QR Base Domain</span>
-              </label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDomainExample(window.location.origin)}
-                  className="text-[11px] font-bold text-slate-500 hover:text-black transition-colors"
+            <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <Server className="w-4 h-4 text-black" />
+              <span>Domain Routing Mode</span>
+            </label>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Option 1: Current Host Domain (Safe & Recommended) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setDomainMode('current_host');
+                  setDomainVerificationResult(null);
+                }}
+                className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer relative ${
+                  domainMode === 'current_host'
+                    ? 'border-black bg-slate-50/70 shadow-xs'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      domainMode === 'current_host' ? 'border-black' : 'border-slate-300'
+                    }`}>
+                      {domainMode === 'current_host' && <div className="w-2 h-2 rounded-full bg-black" />}
+                    </div>
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      Current System Host
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full">
+                    Recommended
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 pl-6 leading-relaxed">
+                  Automatically locks to your active server host (<code className="font-bold text-black">{currentHostDomain || window.location.origin}</code>).
+                  Scans are guaranteed to hit this server without needing any DNS changes.
+                </p>
+              </button>
+
+              {/* Option 2: Custom Production Domain (Advanced) */}
+              <button
+                type="button"
+                onClick={() => setDomainMode('custom')}
+                className={`p-4 rounded-xl border-2 text-left transition-all cursor-pointer relative ${
+                  domainMode === 'custom'
+                    ? 'border-black bg-slate-50/70 shadow-xs'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      domainMode === 'custom' ? 'border-black' : 'border-slate-300'
+                    }`}>
+                      {domainMode === 'custom' && <div className="w-2 h-2 rounded-full bg-black" />}
+                    </div>
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                      Custom Production Domain
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-full">
+                    Advanced
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 pl-6 leading-relaxed">
+                  Use a custom branded domain (e.g. <code className="font-bold text-black">https://qr.yourbrand.com</code>).
+                  Requires DNS CNAME/A records pointing to this server to avoid broken scans.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* Custom Domain Input & Reachability Verification (Shown when Custom Mode selected) */}
+          {domainMode === 'custom' && (
+            <div className="p-4 sm:p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-4 animate-fade-in">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-black" />
+                    <span>Custom Branded Domain URL</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowDnsHelp(!showDnsHelp)}
+                    className="text-[11px] font-bold text-slate-600 hover:text-black flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                    <span>{showDnsHelp ? 'Hide DNS Guide' : 'DNS Setup Guide'}</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={qrBaseDomain}
+                    onChange={(e) => {
+                      setQrBaseDomain(e.target.value);
+                      setDomainVerificationResult(null);
+                    }}
+                    placeholder="https://qr.yourbrand.com"
+                    className="flex-1 h-11 px-3.5 font-mono bg-white border border-slate-300 rounded-lg text-sm font-semibold text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleVerifyDomain}
+                    disabled={verifyingDomain || !qrBaseDomain.trim()}
+                    className="px-4 py-2.5 bg-white border border-slate-300 hover:border-black text-slate-900 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 shrink-0 shadow-2xs"
+                  >
+                    {verifyingDomain ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Verifying DNS...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Verify DNS & Reachability</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Enter the fully qualified URL including <code className="font-bold text-slate-700">https://</code>.
+                  Always verify that your DNS points here before saving.
+                </p>
+              </div>
+
+              {/* Domain Verification Results Feedback */}
+              {domainVerificationResult && (
+                <div
+                  className={`p-3.5 rounded-lg border text-xs transition-all ${
+                    domainVerificationResult.reachable
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}
                 >
-                  Use Current Host
-                </button>
-                <span className="text-slate-300">|</span>
-                <button
-                  type="button"
-                  onClick={() => setDomainExample('https://qr.customcliq.com')}
-                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
-                >
-                  Use qr.customcliq.com
-                </button>
+                  <div className="flex items-start gap-2.5">
+                    {domainVerificationResult.reachable ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-1">
+                      <p className="font-bold">
+                        {domainVerificationResult.reachable
+                          ? 'DNS & Server Reachability Confirmed'
+                          : 'Reachability Warning: Domain Cannot Hit Server'}
+                      </p>
+                      <p className="leading-relaxed text-[11px]">
+                        {domainVerificationResult.details?.message || domainVerificationResult.message}
+                      </p>
+                      {domainVerificationResult.instructions && (
+                        <p className="text-[11px] font-medium bg-white/70 p-2 rounded border border-amber-200/60 mt-1">
+                          {domainVerificationResult.instructions}
+                        </p>
+                      )}
+                      {!domainVerificationResult.reachable && (
+                        <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider mt-1">
+                          Caution: Activating this domain will cause smartphone QR scans to fail until DNS propagates.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Collapsible DNS Guide */}
+              {showDnsHelp && (
+                <div className="p-4 bg-white rounded-lg border border-slate-200 text-xs text-slate-700 space-y-2.5 animate-fade-in">
+                  <div className="flex items-center gap-1.5 font-black text-slate-900 uppercase tracking-wider text-[11px]">
+                    <Globe className="w-3.5 h-3.5 text-black" />
+                    <span>How to configure Custom Domain DNS for CustomCliq</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed pl-1 text-[11px]">
+                    <li>
+                      Log in to your domain registrar or DNS management console (e.g., Cloudflare, GoDaddy, Namecheap).
+                    </li>
+                    <li>
+                      Create a <strong className="text-black">CNAME Record</strong>:
+                      Set Host/Name to your subdomain (e.g. <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-black">qr</code>)
+                      pointing to your server host or domain.
+                    </li>
+                    <li>
+                      Or create an <strong className="text-black">A Record</strong>:
+                      Set Host/Name to <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-black">qr</code>
+                      pointing to your server's public IP address.
+                    </li>
+                    <li>
+                      Wait 2-5 minutes for DNS propagation, then click <strong className="text-black">"Verify DNS & Reachability"</strong> above.
+                    </li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Live QR URL Preview Box */}
+          <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                <LinkIcon className="w-3.5 h-3.5 text-black" />
+                <span>Live QR Code Format Preview</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => handleCopySampleUrl(sampleQrUrl)}
+                className="text-[11px] font-bold text-slate-600 hover:text-black flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                {copiedSampleUrl ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    <span className="text-emerald-600">Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>Copy Sample</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Standard Redirect Path:
+                </span>
+                <code className="font-mono text-xs font-bold text-black break-all select-all">
+                  {sampleQrUrl}
+                </code>
+              </div>
+              <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Direct Root Path:
+                </span>
+                <code className="font-mono text-xs font-bold text-black break-all select-all">
+                  {sampleCleanUrl}
+                </code>
               </div>
             </div>
-            <input
-              type="text"
-              value={qrBaseDomain}
-              onChange={(e) => setQrBaseDomain(e.target.value)}
-              placeholder="e.g. https://qr.customcliq.com or http://localhost:5173"
-              className="w-full h-11 px-3.5 font-mono bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
-            />
-            <p className="text-[11px] text-slate-500 mt-1.5">
-              All generated QR codes, CSV/SVG exports, and copy links format with this base domain (e.g.{' '}
-              <code className="font-bold text-black">{qrBaseDomain || activeDetectedDomain}/r/CC-9X7K2P</code>). Leave empty to use auto-detected host.
+            <p className="text-[10px] text-slate-400 mt-2">
+              All printed standees, batch export files (CSV/Excel/SVG), and mobile scans will route through this base domain.
             </p>
           </div>
 
@@ -233,17 +546,39 @@ export default function SettingsPage() {
             />
           </div>
 
-          {/* Save Button */}
-          <div className="pt-2 flex items-center justify-end">
+          {/* Action Buttons: Reset to Current Host & Save Settings */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
+            {/* 1-Click Reset to Current Host */}
+            <button
+              type="button"
+              onClick={handleResetToCurrentHost}
+              disabled={resettingDomain || saving}
+              className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-300 hover:border-black text-slate-700 hover:text-black rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+              title="Immediately clears any custom domain override and locks to the current accessible server host"
+            >
+              {resettingDomain ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Restoring...</span>
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Reset to Current Host Domain</span>
+                </>
+              )}
+            </button>
+
+            {/* Save Button */}
             <button
               type="submit"
-              disabled={saving}
-              className="px-6 py-2.5 bg-black text-white hover:bg-zinc-800 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-md disabled:opacity-50"
+              disabled={saving || resettingDomain}
+              className="w-full sm:w-auto px-6 py-2.5 bg-black text-white hover:bg-zinc-800 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md disabled:opacity-50"
             >
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving...</span>
+                  <span>Saving Settings...</span>
                 </>
               ) : (
                 <>
