@@ -40,6 +40,11 @@ const userSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    customDomain: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     assignedCount: {
       type: Number,
       default: 0,

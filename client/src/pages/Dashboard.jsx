@@ -460,10 +460,29 @@ export default function Dashboard() {
         isOpen={isGenerateOpen}
         onClose={() => setIsGenerateOpen(false)}
         admins={admins}
-        onSuccess={() => {
-          fetchLinks();
+        onSuccess={(data, assignedAdminId) => {
+          // Reset to page 1 so new links are visible
+          setPagination((prev) => ({ ...prev, page: 1 }));
+          // If admin was pre-assigned, filter to show that admin's links
+          if (assignedAdminId) {
+            setFilters((prev) => ({
+              ...prev,
+              period: 'all',
+              adminId: assignedAdminId,
+              status: 'all',
+              batchCode: data?.batch?.batchCode || prev.batchCode,
+            }));
+          } else {
+            setFilters((prev) => ({
+              ...prev,
+              period: 'all',
+              status: 'all',
+              batchCode: data?.batch?.batchCode || prev.batchCode,
+            }));
+          }
           fetchStats();
           fetchBatches();
+          if (isSuperAdmin) fetchAdmins();
         }}
       />
 
@@ -476,6 +495,7 @@ export default function Dashboard() {
           setSelectedIds([]);
           fetchLinks();
           fetchStats();
+          fetchBatches();
           if (isSuperAdmin) fetchAdmins();
         }}
       />

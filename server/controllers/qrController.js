@@ -59,6 +59,18 @@ const getQrBaseDomain = async (req) => {
   return (process.env.DEFAULT_QR_DOMAIN || 'http://localhost:5173').replace(/\/+$/, '');
 };
 
+// Helper to resolve the active domain for a link (taking admin customDomain into account)
+const resolveLinkDomain = (link, baseDomain) => {
+  if (link && link.assignedTo && link.assignedTo.customDomain && link.assignedTo.customDomain.trim()) {
+    let cd = link.assignedTo.customDomain.trim().replace(/\/+$/, '');
+    if (!cd.match(/^https?:\/\//i)) {
+      cd = `https://${cd}`;
+    }
+    return cd;
+  }
+  return baseDomain;
+};
+
 // Helper to generate print-ready vector SVG containing QR code + centered short code below it
 // Optimized for CorelDRAW, Illustrator, Plotters, and CNC laser engraving:
 // - Closed filled compound path (fill="#000000", stroke="none")
@@ -126,7 +138,7 @@ const generateSlug = () => {
 // @route   POST /api/qr/generate
 exports.generateBatch = async (req, res) => {
   try {
-    const { count = 100, batchCode: customBatchCode, description } = req.body;
+    const { count = 100, batchCode: customBatchCode, description, adminId } = req.body;
     const numCount = parseInt(count, 10);
 
     if (isNaN(numCount) || numCount <= 0 || numCount > 5000) {
@@ -134,6 +146,18 @@ exports.generateBatch = async (req, res) => {
         success: false,
         message: 'Please provide a valid count between 1 and 5000',
       });
+    }
+
+    // Optional admin assignment validation
+    let assignedAdmin = null;
+    if (adminId && adminId.toString().trim() !== '') {
+      assignedAdmin = await User.findOne({ _id: adminId.toString().trim(), role: 'admin' });
+      if (!assignedAdmin) {
+        return res.status(404).json({
+          success: false,
+          message: 'Selected Admin was not found',
+        });
+      }
     }
 
     // Generate or format Batch Code
@@ -158,7 +182,7 @@ exports.generateBatch = async (req, res) => {
       batchCode,
       description: description ? description.trim() : '',
       totalCount: numCount,
-      assignedCount: 0,
+      assignedCount: assignedAdmin ? numCount : 0,
       configuredCount: 0,
       createdBy: req.user._id,
     });
@@ -167,6 +191,7 @@ exports.generateBatch = async (req, res) => {
     // Generate unique slugs
     const linksToInsert = [];
     const generatedCodes = new Set();
+    const assignDate = new Date();
 
     while (linksToInsert.length < numCount) {
       const code = generateSlug();
@@ -176,8 +201,9 @@ exports.generateBatch = async (req, res) => {
           code,
           batchCode,
           batchId: batch._id,
-          assignedTo: null,
-          status: 'unassigned',
+          assignedTo: assignedAdmin ? assignedAdmin._id : null,
+          assignedAt: assignedAdmin ? assignDate : undefined,
+          status: assignedAdmin ? 'assigned' : 'unassigned',
           createdBy: req.user._id,
         });
       }
@@ -187,18 +213,26 @@ exports.generateBatch = async (req, res) => {
     await QrLink.insertMany(linksToInsert, { ordered: false });
 
     const baseDomain = await getQrBaseDomain(req);
+    const activeDomain = assignedAdmin?.customDomain
+      ? resolveLinkDomain({ assignedTo: assignedAdmin }, baseDomain)
+      : baseDomain;
+
+    const message = assignedAdmin
+      ? `Successfully generated ${numCount} QR links under Batch "${batchCode}" and assigned to ${assignedAdmin.name}!`
+      : `Successfully generated ${numCount} QR links under Batch "${batchCode}"`;
 
     return res.status(201).json({
       success: true,
-      message: `Successfully generated ${numCount} QR links under Batch "${batchCode}"`,
+      message,
       batch: {
         id: batch._id,
         batchCode: batch.batchCode,
         totalCount: batch.totalCount,
+        assignedCount: batch.assignedCount,
         description: batch.description,
         createdAt: batch.createdAt,
       },
-      sampleLink: `${baseDomain}/r/${linksToInsert[0].code}`,
+      sampleLink: `${activeDomain}/r/${linksToInsert[0].code}`,
     });
   } catch (error) {
     console.error('Generate batch error:', error);
@@ -294,7 +328,7 @@ exports.getQrLinks = async (req, res) => {
 
     const [links, total] = await Promise.all([
       QrLink.find(query)
-        .populate('assignedTo', 'name email phone company')
+        .populate('assignedTo', 'name email phone company customDomain')
         .sort(sort)
         .skip(skip)
         .limit(limitNum)
@@ -304,11 +338,14 @@ exports.getQrLinks = async (req, res) => {
 
     const baseDomain = await getQrBaseDomain(req);
 
-    const formattedLinks = links.map((link) => ({
-      ...link,
-      fullUrl: `${baseDomain}/r/${link.code}`,
-      cleanUrl: `${baseDomain}/${link.code}`,
-    }));
+    const formattedLinks = links.map((link) => {
+      const linkDomain = resolveLinkDomain(link, baseDomain);
+      return {
+        ...link,
+        fullUrl: `${linkDomain}/r/${link.code}`,
+        cleanUrl: `${linkDomain}/${link.code}`,
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -333,26 +370,93 @@ exports.getQrLinks = async (req, res) => {
 // @route   GET /api/qr/batches
 exports.getBatches = async (req, res) => {
   try {
-    const batches = await Batch.find().sort({ createdAt: -1 }).lean();
+    const isAdmin = req.user.role === 'admin';
 
-    // Calculate live counts for each batch
-    const batchesWithCounts = await Promise.all(
-      batches.map(async (batch) => {
-        const total = await QrLink.countDocuments({ batchCode: batch.batchCode });
-        const assigned = await QrLink.countDocuments({
-          batchCode: batch.batchCode,
-          assignedTo: { $ne: null },
-        });
-        const configured = await QrLink.countDocuments({
-          batchCode: batch.batchCode,
-          status: 'configured',
-        });
-        const scans = await QrLink.aggregate([
-          { $match: { batchCode: batch.batchCode } },
-          { $group: { _id: null, total: { $sum: '$scanCount' } } },
-        ]);
+    let batches = [];
 
-        const totalScans = scans[0]?.total || 0;
+    if (isAdmin) {
+      // For Reseller Admin: Only retrieve batches containing links assigned to this Admin
+      const adminBatchCodes = await QrLink.distinct('batchCode', {
+        assignedTo: req.user._id,
+      });
+
+      batches = await Batch.find({ batchCode: { $in: adminBatchCodes } })
+        .sort({ createdAt: -1 })
+        .lean();
+    } else {
+      batches = await Batch.find().sort({ createdAt: -1 }).lean();
+    }
+
+    let batchesWithCounts = [];
+
+    if (isAdmin) {
+      // Single aggregation for all batches assigned to this admin
+      const batchAgg = await QrLink.aggregate([
+        { $match: { assignedTo: req.user._id, batchCode: { $in: adminBatchCodes } } },
+        {
+          $group: {
+            _id: '$batchCode',
+            totalCount: { $sum: 1 },
+            configuredCount: {
+              $sum: { $cond: [{ $eq: ['$status', 'configured'] }, 1, 0] },
+            },
+            totalScans: { $sum: '$scanCount' },
+          },
+        },
+      ]);
+      const aggMap = new Map(batchAgg.map((item) => [item._id, item]));
+
+      batchesWithCounts = batches.map((batch) => {
+        const stats = aggMap.get(batch.batchCode) || {
+          totalCount: 0,
+          configuredCount: 0,
+          totalScans: 0,
+        };
+        const total = stats.totalCount || 0;
+        const configured = stats.configuredCount || 0;
+        const totalScans = stats.totalScans || 0;
+        const readyToSell = total - configured;
+
+        return {
+          ...batch,
+          totalCount: total,
+          assignedCount: total,
+          unassignedCount: readyToSell > 0 ? readyToSell : 0,
+          configuredCount: configured,
+          totalScans,
+          sellThroughRate: total > 0 ? Number(((configured / total) * 100).toFixed(1)) : 0,
+        };
+      });
+    } else {
+      // Single aggregation across all batches for SuperAdmin
+      const batchAgg = await QrLink.aggregate([
+        {
+          $group: {
+            _id: '$batchCode',
+            totalCount: { $sum: 1 },
+            assignedCount: {
+              $sum: { $cond: [{ $ne: ['$assignedTo', null] }, 1, 0] },
+            },
+            configuredCount: {
+              $sum: { $cond: [{ $eq: ['$status', 'configured'] }, 1, 0] },
+            },
+            totalScans: { $sum: '$scanCount' },
+          },
+        },
+      ]);
+      const aggMap = new Map(batchAgg.map((item) => [item._id, item]));
+
+      batchesWithCounts = batches.map((batch) => {
+        const stats = aggMap.get(batch.batchCode) || {
+          totalCount: 0,
+          assignedCount: 0,
+          configuredCount: 0,
+          totalScans: 0,
+        };
+        const total = stats.totalCount || 0;
+        const assigned = stats.assignedCount || 0;
+        const configured = stats.configuredCount || 0;
+        const totalScans = stats.totalScans || 0;
         const unassigned = total - assigned;
 
         return {
@@ -364,8 +468,8 @@ exports.getBatches = async (req, res) => {
           totalScans,
           sellThroughRate: assigned > 0 ? Number(((configured / assigned) * 100).toFixed(1)) : 0,
         };
-      })
-    );
+      });
+    }
 
     // Calculate aggregate KPIs
     let totalVolume = 0;
@@ -389,8 +493,10 @@ exports.getBatches = async (req, res) => {
       totalUnassigned,
       totalConfigured,
       totalScans,
-      overallAllocationRate: totalVolume > 0 ? Number(((totalAssigned / totalVolume) * 100).toFixed(1)) : 0,
-      overallActivationRate: totalVolume > 0 ? Number(((totalConfigured / totalVolume) * 100).toFixed(1)) : 0,
+      overallAllocationRate:
+        totalVolume > 0 ? Number(((totalAssigned / totalVolume) * 100).toFixed(1)) : 0,
+      overallActivationRate:
+        totalVolume > 0 ? Number(((totalConfigured / totalVolume) * 100).toFixed(1)) : 0,
     };
 
     return res.status(200).json({
@@ -697,21 +803,23 @@ exports.configureLink = async (req, res) => {
 
     const baseDomain = await getQrBaseDomain(req);
 
+    const populated = await QrLink.findById(link._id)
+      .populate('assignedTo', 'name email phone company customDomain')
+      .lean();
+
+    const linkDomain = resolveLinkDomain(populated, baseDomain);
+
     // Asynchronously trigger Google Sheet Live Lead Sync (fire-and-forget, non-blocking)
-    QrLink.findById(link._id)
-      .populate('assignedTo', 'name email phone company')
-      .lean()
-      .then((popLink) => {
-        if (popLink) syncLeadToGoogleSheet(popLink, baseDomain);
-      })
-      .catch((err) => console.error('[GoogleSheetSync] Error fetching populated link:', err));
+    if (populated) {
+      syncLeadToGoogleSheet(populated, linkDomain);
+    }
 
     return res.status(200).json({
       success: true,
       message: 'QR Link redirection configured successfully!',
       link: {
-        ...link.toObject(),
-        fullUrl: `${baseDomain}/r/${link.code}`,
+        ...(populated || link.toObject()),
+        fullUrl: `${linkDomain}/r/${link.code}`,
       },
     });
   } catch (error) {
@@ -731,7 +839,7 @@ exports.downloadQrCode = async (req, res) => {
     const { id } = req.params;
     const { format = 'png', size = 1000 } = req.query;
 
-    const link = await QrLink.findById(id);
+    const link = await QrLink.findById(id).populate('assignedTo', 'customDomain');
     if (!link) {
       return res.status(404).json({
         success: false,
@@ -740,7 +848,8 @@ exports.downloadQrCode = async (req, res) => {
     }
 
     const baseDomain = await getQrBaseDomain(req);
-    const targetUrl = `${baseDomain}/r/${link.code}`;
+    const linkDomain = resolveLinkDomain(link, baseDomain);
+    const targetUrl = `${linkDomain}/r/${link.code}`;
 
     if (format === 'svg') {
       const svgString = await generatePrintableQrSvg(targetUrl, link.code);
@@ -800,29 +909,33 @@ exports.exportQrData = async (req, res) => {
     if (status && status !== 'all') query.status = status;
 
     const links = await QrLink.find(query)
-      .populate('assignedTo', 'name email phone company')
+      .populate('assignedTo', 'name email phone company customDomain')
       .sort({ createdAt: -1 })
       .lean();
 
     const baseDomain = await getQrBaseDomain(req);
 
-    const exportData = links.map((l) => ({
-      'Batch Code': l.batchCode,
-      'QR Code': l.code,
-      'Full NFC / QR URL': `${baseDomain}/r/${l.code}`,
-      'Direct URL': `${baseDomain}/${l.code}`,
-      'Status': l.status.toUpperCase(),
-      'Assigned Admin': l.assignedTo ? l.assignedTo.name : 'Unassigned',
-      'Admin Phone': l.assignedTo ? l.assignedTo.phone : '',
-      'Business Name': l.businessName || '',
-      'Customer Name': l.customerName || '',
-      'Customer Phone': l.customerPhone || '',
-      'Customer Email': l.customerEmail || '',
-      'Redirection URL': l.redirectUrl || '',
-      'Scan Count': l.scanCount || 0,
-      'Last Scanned': l.lastScannedAt ? new Date(l.lastScannedAt).toLocaleString() : '',
-      'Created Date': new Date(l.createdAt).toLocaleString(),
-    }));
+    const exportData = links.map((l) => {
+      const linkDomain = resolveLinkDomain(l, baseDomain);
+      return {
+        'Batch Code': l.batchCode,
+        'QR Code': l.code,
+        'Full NFC / QR URL': `${linkDomain}/r/${l.code}`,
+        'Direct URL': `${linkDomain}/${l.code}`,
+        'Status': l.status.toUpperCase(),
+        'Assigned Admin': l.assignedTo ? l.assignedTo.name : 'Unassigned',
+        'Admin Phone': l.assignedTo ? l.assignedTo.phone : '',
+        'Admin Domain': l.assignedTo?.customDomain || '',
+        'Business Name': l.businessName || '',
+        'Customer Name': l.customerName || '',
+        'Customer Phone': l.customerPhone || '',
+        'Customer Email': l.customerEmail || '',
+        'Redirection URL': l.redirectUrl || '',
+        'Scan Count': l.scanCount || 0,
+        'Last Scanned': l.lastScannedAt ? new Date(l.lastScannedAt).toLocaleString() : '',
+        'Created Date': new Date(l.createdAt).toLocaleString(),
+      };
+    });
 
     const filename = `CustomCliq_Export_${batchCode || (query._id ? 'Selected' : 'All')}_${Date.now()}`;
 
@@ -853,7 +966,7 @@ exports.exportQrData = async (req, res) => {
         const chunk = links.slice(i, i + CHUNK_SIZE);
         const batchResults = await Promise.all(
           chunk.map(async (link) => {
-            const tapUrl = `${baseDomain}/r/${link.code}`;
+            const tapUrl = `${resolveLinkDomain(link, baseDomain)}/r/${link.code}`;
             const svgString = await generatePrintableQrSvg(tapUrl, link.code);
             return {
               name: `qr-svgs/${link.code}.svg`,
