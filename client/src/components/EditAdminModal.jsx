@@ -7,6 +7,7 @@ export default function EditAdminModal({ isOpen, onClose, admin, onSuccess }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
+  const [customDomain, setCustomDomain] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -15,6 +16,7 @@ export default function EditAdminModal({ isOpen, onClose, admin, onSuccess }) {
       setName(admin.name || '');
       setPhone(admin.phone || '');
       setCompany(admin.company || '');
+      setCustomDomain(admin.customDomain || '');
       setPassword('');
     }
   }, [admin]);
@@ -29,6 +31,7 @@ export default function EditAdminModal({ isOpen, onClose, admin, onSuccess }) {
         name: name.trim(),
         phone: phone.trim(),
         company: company.trim(),
+        customDomain: customDomain.trim(),
       };
       if (password.trim()) {
         payload.password = password.trim();
@@ -110,6 +113,25 @@ export default function EditAdminModal({ isOpen, onClose, admin, onSuccess }) {
               placeholder="e.g. Apex Marketing Agency"
               className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
             />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Custom Brand Domain (Whitelabel)
+              </label>
+              <span className="text-[10px] text-slate-400">Optional</span>
+            </div>
+            <input
+              type="text"
+              value={customDomain}
+              onChange={(e) => setCustomDomain(e.target.value)}
+              placeholder="e.g. qr.partnerbrand.com"
+              className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              QRs allocated to this partner will use this domain instead of the default.
+            </p>
           </div>
 
           <div>

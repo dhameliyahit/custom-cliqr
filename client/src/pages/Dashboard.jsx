@@ -385,7 +385,7 @@ export default function Dashboard() {
               className="flex-1 sm:flex-initial h-10 px-4 bg-black text-white hover:bg-zinc-800 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
             >
               <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>Action QR</span>
+              <span>Active QR</span>
             </button>
           )}
         </div>
@@ -415,7 +415,9 @@ export default function Dashboard() {
         loading={loading}
         pagination={pagination}
         onPageChange={(page) => setPagination((prev) => ({ ...prev, page }))}
+        onRowsChange={(limit) => setPagination((prev) => ({ ...prev, limit, page: 1 }))}
         selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
         onToggleSelect={handleToggleSelect}
         onToggleSelectAll={handleToggleSelectAll}
         onConfigureLink={(link) => setConfigureLink(link)}
@@ -431,10 +433,10 @@ export default function Dashboard() {
           type="button"
           onClick={() => handleOpenQuickActivate()}
           className="sm:hidden fixed bottom-5 right-5 z-40 h-13 px-4 bg-black hover:bg-zinc-900 text-white rounded-full shadow-2xl flex items-center gap-2 border border-amber-400/80 transition-all active:scale-95 cursor-pointer"
-          title="Action QR"
+          title="Active QR"
         >
           <Zap className="w-5 h-5 text-amber-400 fill-amber-400 animate-pulse" />
-          <span className="text-xs font-black tracking-wider uppercase">Action QR</span>
+          <span className="text-xs font-black tracking-wider uppercase">Active QR</span>
         </button>
       )}
 
@@ -457,6 +459,7 @@ export default function Dashboard() {
       <GenerateQrModal
         isOpen={isGenerateOpen}
         onClose={() => setIsGenerateOpen(false)}
+        admins={admins}
         onSuccess={() => {
           fetchLinks();
           fetchStats();

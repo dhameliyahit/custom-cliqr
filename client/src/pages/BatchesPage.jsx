@@ -26,6 +26,7 @@ import api, { downloadExportFile } from '../services/api';
 import AssignModal from '../components/AssignModal';
 import GenerateQrModal from '../components/GenerateQrModal';
 import BatchDetailsModal from '../components/BatchDetailsModal';
+import PrimeDataTable from '../components/common/PrimeDataTable';
 import toast from 'react-hot-toast';
 
 export default function BatchesPage() {
@@ -182,6 +183,207 @@ export default function BatchesPage() {
   const hasActiveFilters =
     search.trim() !== '' || statusFilter !== 'all' || periodFilter !== 'all' || sortBy !== 'newest';
 
+  // PrimeDataTable Column Definitions
+  const columns = useMemo(() => {
+    const cols = [
+      {
+        field: 'batchCode',
+        header: 'Batch Code',
+        minWidth: '130px',
+        body: (batch) => (
+          <span className="font-mono font-bold text-xs sm:text-sm text-black bg-slate-100 px-2 py-1 rounded-md border border-slate-200 select-all">
+            {batch.batchCode}
+          </span>
+        ),
+      },
+      {
+        field: 'description',
+        header: 'Description',
+        minWidth: '160px',
+        maxWidth: '220px',
+        body: (batch) => (
+          <span
+            className="text-slate-600 font-medium truncate block max-w-[200px]"
+            title={batch.description || ''}
+          >
+            {batch.description || <span className="text-slate-400 italic">No notes</span>}
+          </span>
+        ),
+      },
+      {
+        field: 'totalCount',
+        header: isSuperAdmin ? 'Total QRs' : 'Allocated QRs',
+        align: 'center',
+        width: '105px',
+        body: (batch) => (
+          <span className="font-mono font-black text-sm text-black">
+            {batch.totalCount?.toLocaleString()}
+          </span>
+        ),
+      },
+      {
+        field: 'configuredCount',
+        header: 'Status Breakdown',
+        minWidth: '160px',
+        body: (batch) => {
+          const bTotal = batch.totalCount || 1;
+          const cfgPct = Math.min(100, Math.round(((batch.configuredCount || 0) / bTotal) * 100));
+          const asgPendingPct = Math.min(
+            100 - cfgPct,
+            Math.round((((batch.assignedCount || 0) - (batch.configuredCount || 0)) / bTotal) * 100)
+          );
+
+          return (
+            <div className="space-y-1 min-w-[130px]">
+              <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex">
+                {cfgPct > 0 && (
+                  <div
+                    style={{ width: `${cfgPct}%` }}
+                    className="h-full bg-black"
+                    title={`Active: ${batch.configuredCount} (${cfgPct}%)`}
+                  />
+                )}
+                {asgPendingPct > 0 && (
+                  <div
+                    style={{ width: `${asgPendingPct}%` }}
+                    className="h-full bg-slate-400"
+                    title={`Assigned (Ready): ${(batch.assignedCount || 0) - (batch.configuredCount || 0)} (${asgPendingPct}%)`}
+                  />
+                )}
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                <span className="font-bold text-black">{cfgPct}% active</span>
+                <span>
+                  {batch.configuredCount || 0} of {batch.totalCount}
+                </span>
+              </div>
+            </div>
+          );
+        },
+      },
+    ];
+
+    if (isSuperAdmin) {
+      cols.push({
+        field: 'assignedCount',
+        header: 'Assigned',
+        align: 'center',
+        width: '100px',
+        body: (batch) => (
+          <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
+            {batch.assignedCount?.toLocaleString() || 0}
+          </span>
+        ),
+      });
+    }
+
+    cols.push(
+      {
+        field: 'unassignedCount',
+        header: isSuperAdmin ? 'In Stock' : 'Ready to Sell',
+        align: 'center',
+        width: '105px',
+        body: (batch) => (
+          <span className="font-mono font-bold text-xs bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md text-black">
+            {batch.unassignedCount?.toLocaleString() || 0}
+          </span>
+        ),
+      },
+      {
+        field: 'configuredCount',
+        header: 'Active QRs',
+        align: 'center',
+        width: '100px',
+        body: (batch) => (
+          <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
+            {batch.configuredCount?.toLocaleString() || 0}
+          </span>
+        ),
+      },
+      {
+        field: 'totalScans',
+        header: 'Total Scans',
+        align: 'center',
+        width: '110px',
+        body: (batch) => (
+          <span className="font-mono font-bold text-xs text-slate-700">
+            {batch.totalScans?.toLocaleString() || 0}
+          </span>
+        ),
+      },
+      {
+        field: 'createdAt',
+        header: 'Date Created',
+        align: 'center',
+        width: '120px',
+        body: (batch) => (
+          <span className="text-xs text-slate-500 font-medium font-mono">
+            {new Date(batch.createdAt).toLocaleDateString()}
+          </span>
+        ),
+      },
+      {
+        field: 'actions',
+        header: 'Actions',
+        align: 'right',
+        minWidth: '220px',
+        body: (batch) => (
+          <div className="flex items-center justify-end gap-1.5">
+            {/* Inspect Batch Drilldown Modal */}
+            <button
+              type="button"
+              onClick={() => setInspectBatchCode(batch.batchCode)}
+              className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
+              title="Inspect batch analytics & allocations"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+
+            {/* Quick Assign */}
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setAssignBatch(batch)}
+                className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
+                title="Assign links from this batch to Admin"
+              >
+                <UserCheck className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Export Buttons */}
+            <button
+              type="button"
+              onClick={() => handleExportBatch(batch.batchCode, 'csv')}
+              className="h-8 px-2 bg-black text-white hover:bg-zinc-800 rounded-md text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              title="Export CSV"
+            >
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExportBatch(batch.batchCode, 'xlsx')}
+              className="h-8 px-2 bg-white text-black border border-slate-300 hover:border-black rounded-md text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              title="Export Excel"
+            >
+              XLSX
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExportBatch(batch.batchCode, 'zip')}
+              className="h-8 px-2 bg-zinc-900 text-amber-400 hover:bg-zinc-800 rounded-md text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              title="Export Print-Ready SVGs ZIP"
+            >
+              ZIP
+            </button>
+          </div>
+        ),
+      }
+    );
+
+    return cols;
+  }, [isSuperAdmin]);
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
       {/* Page Header */}
@@ -189,10 +391,16 @@ export default function BatchesPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-black tracking-tight flex items-center gap-2">
             <Layers className="w-6 h-6 text-black" />
-            <span>QR Production Batches & Inventory Analytics</span>
+            <span>
+              {isSuperAdmin
+                ? 'QR Production Batches & Inventory Analytics'
+                : 'My Assigned Batches & Inventory'}
+            </span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Monitor bulk production lots, track reseller allocation ratios, inspect market conversion, and export printing packages.
+            {isSuperAdmin
+              ? 'Monitor bulk production lots, track reseller allocation ratios, inspect market conversion, and export printing packages.'
+              : 'Review QR batches allocated to your partner account, track client activation progress, and export links.'}
           </p>
         </div>
 
@@ -414,197 +622,29 @@ export default function BatchesPage() {
       </div>
 
       {/* Batches Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto min-h-[320px]">
-          <table className="w-full text-left text-xs sm:text-sm border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wider text-[11px] font-bold">
-                <th className="py-3 px-4 font-bold">Batch Code</th>
-                <th className="py-3 px-4 font-bold">Description</th>
-                <th className="py-3 px-4 font-bold text-center">Total QRs</th>
-                <th className="py-3 px-4 font-bold">Status Breakdown</th>
-                <th className="py-3 px-4 font-bold text-center">Assigned</th>
-                <th className="py-3 px-4 font-bold text-center">In Stock</th>
-                <th className="py-3 px-4 font-bold text-center">Active QRs</th>
-                <th className="py-3 px-4 font-bold text-center">Total Scans</th>
-                <th className="py-3 px-4 font-bold text-center">Date Created</th>
-                <th className="py-3 px-4 font-bold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-400">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-black mb-2"></div>
-                    <p className="text-xs font-medium">Loading batch records...</p>
-                  </td>
-                </tr>
-              ) : filteredBatches.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-500">
-                    <Layers className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                    <p className="font-bold text-sm text-black">No Batches Match Filters</p>
-                    <p className="text-xs text-slate-400 mt-0.5 mb-3">
-                      Try clearing or changing your search criteria.
-                    </p>
-                    {hasActiveFilters && (
-                      <button
-                        onClick={handleResetFilters}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-black inline-flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Clear Filters</span>
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                filteredBatches.map((batch) => {
-                  const bTotal = batch.totalCount || 1;
-                  const cfgPct = Math.min(100, Math.round(((batch.configuredCount || 0) / bTotal) * 100));
-                  const asgPendingPct = Math.min(
-                    100 - cfgPct,
-                    Math.round((((batch.assignedCount || 0) - (batch.configuredCount || 0)) / bTotal) * 100)
-                  );
-                  const poolPct = Math.max(0, 100 - cfgPct - asgPendingPct);
-
-                  return (
-                    <tr key={batch._id} className="hover:bg-slate-50/80 transition-colors">
-                      {/* Batch Code */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-bold text-xs sm:text-sm text-black bg-slate-100 px-2 py-1 rounded-md border border-slate-200 select-all">
-                            {batch.batchCode}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Description */}
-                      <td className="py-3.5 px-4 text-slate-600 max-w-[180px] truncate font-medium">
-                        {batch.description || <span className="text-slate-400 italic">No notes</span>}
-                      </td>
-
-                      {/* Total Volume */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-black text-sm text-black">
-                          {batch.totalCount?.toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* Visual Segmented Inventory Ratio Bar */}
-                      <td className="py-3.5 px-4 min-w-[140px]">
-                        <div className="space-y-1">
-                          <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex">
-                            {cfgPct > 0 && (
-                              <div
-                                style={{ width: `${cfgPct}%` }}
-                                className="h-full bg-black"
-                                title={`Active: ${batch.configuredCount} (${cfgPct}%)`}
-                              />
-                            )}
-                            {asgPendingPct > 0 && (
-                              <div
-                                style={{ width: `${asgPendingPct}%` }}
-                                className="h-full bg-slate-400"
-                                title={`Assigned (Ready): ${batch.assignedCount - batch.configuredCount} (${asgPendingPct}%)`}
-                              />
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                            <span className="font-bold text-black">{cfgPct}% active</span>
-                            <span>{batch.configuredCount || 0} of {batch.totalCount}</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Assigned to Admins */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
-                          {batch.assignedCount?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* In Stock (Unassigned) */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md text-black">
-                          {batch.unassignedCount?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* Active QRs */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
-                          {batch.configuredCount?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* Total Scans */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs text-slate-700">
-                          {batch.totalScans?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* Created Date */}
-                      <td className="py-3.5 px-4 text-center text-xs text-slate-500 font-medium">
-                        {new Date(batch.createdAt).toLocaleDateString()}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Inspect Batch Drilldown Modal */}
-                          <button
-                            onClick={() => setInspectBatchCode(batch.batchCode)}
-                            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
-                            title="Inspect batch analytics & partner allocations"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {/* Quick Assign */}
-                          {isSuperAdmin && (
-                            <button
-                              onClick={() => setAssignBatch(batch)}
-                              className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
-                              title="Assign links from this batch to Admin"
-                            >
-                              <UserCheck className="w-4 h-4" />
-                            </button>
-                          )}
-
-                          {/* Export Dropdown / Buttons */}
-                          <button
-                            onClick={() => handleExportBatch(batch.batchCode, 'csv')}
-                            className="h-8 px-2 bg-black text-white hover:bg-zinc-800 rounded-md text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-                            title="Export CSV"
-                          >
-                            CSV
-                          </button>
-                          <button
-                            onClick={() => handleExportBatch(batch.batchCode, 'xlsx')}
-                            className="h-8 px-2 bg-white text-black border border-slate-300 hover:border-black rounded-md text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-                            title="Export Excel"
-                          >
-                            XLSX
-                          </button>
-                          <button
-                            onClick={() => handleExportBatch(batch.batchCode, 'zip')}
-                            className="h-8 px-2 bg-zinc-900 text-amber-400 hover:bg-zinc-800 rounded-md text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-                            title="Export Print-Ready SVGs ZIP"
-                          >
-                            ZIP
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PrimeDataTable
+        data={filteredBatches}
+        columns={columns}
+        loading={loading}
+        rowKey="_id"
+        paginator={true}
+        rows={10}
+        rowsPerPageOptions={[10, 25, 50, 100]}
+        tableClassName="min-w-[900px] w-full text-left text-xs sm:text-sm border-collapse"
+        emptyIcon={Layers}
+        emptyMessage="No Batches Match Filters"
+        emptyAction={
+          hasActiveFilters ? (
+            <button
+              onClick={handleResetFilters}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-black inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Clear Filters</span>
+            </button>
+          ) : null
+        }
+      />
 
       {/* Modals */}
       <GenerateQrModal

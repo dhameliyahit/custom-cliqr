@@ -32,14 +32,7 @@ export default function App() {
             }
           >
             <Route path="/" element={<Dashboard />} />
-            <Route
-              path="/batches"
-              element={
-                <ProtectedRoute requireSuperAdmin={true}>
-                  <BatchesPage />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/batches" element={<BatchesPage />} />
 
             {/* Super Admin Protected Pages */}
             <Route

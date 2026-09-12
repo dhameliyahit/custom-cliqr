@@ -17,7 +17,7 @@ export default function Sidebar({ isOpen, onClose }) {
       name: 'Batches',
       path: '/batches',
       icon: Layers,
-      show: isSuperAdmin,
+      show: true,
     },
     {
       name: 'Admins',

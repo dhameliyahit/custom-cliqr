@@ -42,21 +42,31 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
       return;
     }
 
+    if (!businessName.trim()) {
+      toast.error('Please enter the Business Name');
+      return;
+    }
+
+    if (!customerName.trim()) {
+      toast.error('Please enter the Customer Name');
+      return;
+    }
+
     const phoneDigits = customerPhone.replace(/\D/g, '');
-    if (phoneDigits && phoneDigits.length !== 10) {
+    if (!phoneDigits || phoneDigits.length !== 10) {
       toast.error('Customer mobile number must be exactly 10 digits');
       return;
     }
-    const formattedPhone = phoneDigits ? `+91 ${phoneDigits}` : '';
+    const formattedPhone = `+91 ${phoneDigits}`;
 
     setLoading(true);
     try {
       const { data } = await api.put(`/qr/${link._id}/configure`, {
-        businessName,
-        customerName,
+        businessName: businessName.trim(),
+        customerName: customerName.trim(),
         customerPhone: formattedPhone,
-        customerEmail,
-        redirectUrl,
+        customerEmail: customerEmail.trim(),
+        redirectUrl: redirectUrl.trim(),
         status,
         notes,
       });
@@ -129,10 +139,11 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                <span>Business Name</span>
+                <span>Business Name *</span>
               </label>
               <input
                 type="text"
+                required
                 value={businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
                 placeholder="e.g. Starbucks Coffee"
@@ -143,10 +154,11 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <User className="w-3.5 h-3.5 text-slate-400" />
-                <span>Customer Name</span>
+                <span>Customer Name *</span>
               </label>
               <input
                 type="text"
+                required
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="e.g. Elena Rostova"
@@ -160,7 +172,7 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
                 <span className="flex items-center gap-1">
                   <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Customer Mobile</span>
+                  <span>Customer Mobile *</span>
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono font-normal">
                   {customerPhone.length}/10
@@ -172,6 +184,7 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
                 </span>
                 <input
                   type="tel"
+                  required
                   maxLength={10}
                   value={customerPhone}
                   onChange={(e) => {
@@ -187,7 +200,7 @@ export default function ConfigureLinkModal({ isOpen, onClose, link, onSuccess })
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <Mail className="w-3.5 h-3.5 text-slate-400" />
-                <span>Customer Email</span>
+                <span>Customer Email (Optional)</span>
               </label>
               <input
                 type="email"

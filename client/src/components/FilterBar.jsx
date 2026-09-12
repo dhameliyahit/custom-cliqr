@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { Search, Download, Filter, UserCheck, CheckSquare, X, Trash2, CheckCheck, QrCode } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,6 +16,46 @@ export default function FilterBar({
   onOpenScanModal,
 }) {
   const { isSuperAdmin } = useAuth();
+  const [localSearch, setLocalSearch] = useState(filters.search || '');
+  const debounceTimerRef = useRef(null);
+
+  // Synchronize local search state if filters.search changes externally
+  useEffect(() => {
+    setLocalSearch(filters.search || '');
+  }, [filters.search]);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
+
+  const handleSearchChange = (value) => {
+    setLocalSearch(value);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    if (!value.trim()) {
+      onFilterChange('search', '');
+    } else {
+      debounceTimerRef.current = setTimeout(() => {
+        onFilterChange('search', value);
+      }, 300);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setLocalSearch('');
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    onFilterChange('search', '');
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      onFilterChange('search', localSearch);
+    }
+  };
 
   return (
     <div className="space-y-3 mb-4">
@@ -99,15 +140,16 @@ export default function FilterBar({
             <input
               type="text"
               placeholder="Search by QR code, Batch, Customer..."
-              value={filters.search || ''}
-              onChange={(e) => onFilterChange('search', e.target.value)}
+              value={localSearch}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onKeyDown={handleKeyDown}
               className="input-base input-search pr-24 shadow-2xs"
             />
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {filters.search && (
+              {localSearch && (
                 <button
                   type="button"
-                  onClick={() => onFilterChange('search', '')}
+                  onClick={handleClearSearch}
                   className="p-1 text-slate-400 hover:text-black rounded transition-colors cursor-pointer"
                   title="Clear search"
                 >

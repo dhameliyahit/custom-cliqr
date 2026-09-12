@@ -31,6 +31,7 @@ import api from '../services/api';
 import AdminDetailsModal from '../components/AdminDetailsModal';
 import EditAdminModal from '../components/EditAdminModal';
 import AssignModal from '../components/AssignModal';
+import PrimeDataTable from '../components/common/PrimeDataTable';
 import toast from 'react-hot-toast';
 
 export default function AdminsPage() {
@@ -58,6 +59,7 @@ export default function AdminsPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
+  const [customDomain, setCustomDomain] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -125,6 +127,7 @@ export default function AdminsPage() {
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
         company: company.trim(),
+        customDomain: customDomain.trim(),
         password: password.trim(),
       });
       if (data.success) {
@@ -134,6 +137,7 @@ export default function AdminsPage() {
         setEmail('');
         setPhone('');
         setCompany('');
+        setCustomDomain('');
         setPassword('');
         fetchAdmins();
       }
@@ -235,6 +239,218 @@ export default function AdminsPage() {
 
   const hasActiveFilters =
     search.trim() !== '' || statusFilter !== 'all' || inventoryFilter !== 'all' || sortBy !== 'newest';
+
+  // PrimeDataTable Column Definitions
+  const columns = useMemo(() => [
+    {
+      field: 'name',
+      header: 'Admin Details',
+      minWidth: '220px',
+      body: (admin) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
+            {admin.name?.[0]?.toUpperCase() || 'A'}
+          </div>
+          <div>
+            <p className="font-bold text-xs sm:text-sm text-black">{admin.name}</p>
+            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+              <span className="flex items-center gap-1 font-mono text-[10px]">
+                <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                <span className="truncate max-w-[130px]" title={admin.email}>
+                  {admin.email}
+                </span>
+              </span>
+              {admin.phone && (
+                <span className="flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span>{admin.phone}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      field: 'company',
+      header: 'Company & Domain',
+      minWidth: '150px',
+      body: (admin) => (
+        <div>
+          {admin.company ? (
+            <span
+              className="font-semibold text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 truncate inline-block max-w-[140px]"
+              title={admin.company}
+            >
+              {admin.company}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400 italic">Direct Partner</span>
+          )}
+          {admin.customDomain && (
+            <div className="flex items-center gap-1 mt-1 text-[10px] text-blue-600 font-mono">
+              <Globe className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate max-w-[130px]" title={`Custom Domain: ${admin.customDomain}`}>
+                {admin.customDomain}
+              </span>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      field: 'assignedCount',
+      header: 'Assigned QRs',
+      align: 'center',
+      width: '120px',
+      body: (admin) => (
+        <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
+          {admin.assignedCount?.toLocaleString() || 0}
+        </span>
+      ),
+    },
+    {
+      field: 'configuredCount',
+      header: 'Activation Progress',
+      minWidth: '150px',
+      body: (admin) => {
+        const aTotal = admin.assignedCount || 1;
+        const cfgPct = Math.min(100, Math.round(((admin.configuredCount || 0) / aTotal) * 100));
+
+        return (
+          <div className="space-y-1 min-w-[120px]">
+            <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex">
+              {cfgPct > 0 && (
+                <div
+                  style={{ width: `${cfgPct}%` }}
+                  className="h-full bg-black"
+                  title={`Active: ${admin.configuredCount} (${cfgPct}%)`}
+                />
+              )}
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+              <span className="font-bold text-black">{cfgPct}% active</span>
+              <span>
+                {admin.configuredCount || 0} of {admin.assignedCount || 0}
+              </span>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      field: 'configuredCount',
+      header: 'Active QRs',
+      align: 'center',
+      width: '110px',
+      body: (admin) => (
+        <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
+          {admin.configuredCount?.toLocaleString() || 0}
+        </span>
+      ),
+    },
+    {
+      field: 'availableCount',
+      header: 'Ready to Sell',
+      align: 'center',
+      width: '110px',
+      body: (admin) => (
+        <span className="font-mono font-bold text-xs bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md text-black">
+          {admin.availableCount?.toLocaleString() || 0}
+        </span>
+      ),
+    },
+    {
+      field: 'totalScans',
+      header: 'Total Scans',
+      align: 'center',
+      width: '110px',
+      body: (admin) => (
+        <span className="font-mono font-bold text-xs text-slate-700">
+          {admin.totalScans?.toLocaleString() || 0}
+        </span>
+      ),
+    },
+    {
+      field: 'status',
+      header: 'Status',
+      align: 'center',
+      width: '110px',
+      body: (admin) => (
+        <button
+          type="button"
+          onClick={() => handleToggleStatus(admin)}
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold cursor-pointer transition-colors ${
+            admin.status === 'active'
+              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+              : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-300'
+          }`}
+          title="Click to toggle active/blocked status"
+        >
+          {admin.status === 'active' ? 'Active' : 'Blocked'}
+        </button>
+      ),
+    },
+    {
+      field: 'actions',
+      header: 'Actions',
+      align: 'right',
+      minWidth: '190px',
+      body: (admin) => (
+        <div className="flex items-center justify-end gap-1.5">
+          {/* Inspect Partner Performance */}
+          <button
+            type="button"
+            onClick={() => setInspectAdminId(admin._id)}
+            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
+            title="Inspect partner performance & batch breakdown"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+
+          {/* Edit Partner Profile */}
+          <button
+            type="button"
+            onClick={() => setEditAdmin(admin)}
+            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
+            title="Edit partner profile details"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+
+          {/* Quick Assign Inventory */}
+          <button
+            type="button"
+            onClick={() => setAssignAdmin(admin)}
+            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
+            title="Allocate QR inventory to this partner"
+          >
+            <UserCheck className="w-4 h-4" />
+          </button>
+
+          {/* View QRs in Dashboard */}
+          <button
+            type="button"
+            onClick={() => navigate(`/?adminId=${admin._id}`)}
+            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
+            title="View all QRs assigned to this partner on Dashboard"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </button>
+
+          {/* Delete Partner */}
+          <button
+            type="button"
+            onClick={() => handleDeleteAdmin(admin)}
+            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+            title="Delete Admin"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      ),
+    },
+  ], [navigate]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-6">
@@ -465,210 +681,29 @@ export default function AdminsPage() {
       </div>
 
       {/* Admins Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto min-h-[320px]">
-          <table className="w-full text-left text-xs sm:text-sm border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase tracking-wider text-[11px] font-bold">
-                <th className="py-3 px-4 font-bold">Admin Details</th>
-                <th className="py-3 px-4 font-bold">Company</th>
-                <th className="py-3 px-4 font-bold text-center">Assigned QRs</th>
-                <th className="py-3 px-4 font-bold">Activation Progress</th>
-                <th className="py-3 px-4 font-bold text-center">Active QRs</th>
-                <th className="py-3 px-4 font-bold text-center">Ready to Sell</th>
-                <th className="py-3 px-4 font-bold text-center">Total Scans</th>
-                <th className="py-3 px-4 font-bold text-center">Status</th>
-                <th className="py-3 px-4 font-bold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="py-16 text-center text-slate-400">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-slate-300 border-t-black mb-2"></div>
-                    <p className="text-xs font-medium">Loading admin records...</p>
-                  </td>
-                </tr>
-              ) : filteredAdmins.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="py-16 text-center text-slate-500">
-                    <Users className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                    <p className="font-bold text-sm text-black">No Admins Match Filters</p>
-                    <p className="text-xs text-slate-400 mt-0.5 mb-3">
-                      Try adjusting your search criteria or add a new admin.
-                    </p>
-                    {hasActiveFilters && (
-                      <button
-                        onClick={handleResetFilters}
-                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-black inline-flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Clear Filters</span>
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ) : (
-                filteredAdmins.map((admin) => {
-                  const aTotal = admin.assignedCount || 1;
-                  const cfgPct = Math.min(100, Math.round(((admin.configuredCount || 0) / aTotal) * 100));
-
-                  return (
-                    <tr key={admin._id} className="hover:bg-slate-50/80 transition-colors">
-                      {/* Admin Profile */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs">
-                            {admin.name[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-bold text-xs sm:text-sm text-black">{admin.name}</p>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
-                              <span className="flex items-center gap-1 font-mono text-[10px]">
-                                <Mail className="w-3 h-3 text-slate-400" />
-                                {admin.email}
-                              </span>
-                              {admin.phone && (
-                                <span className="flex items-center gap-1">
-                                  <Phone className="w-3 h-3 text-slate-400" />
-                                  {admin.phone}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Company / Agency */}
-                      <td className="py-3.5 px-4">
-                        {admin.company ? (
-                          <span className="font-semibold text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                            {admin.company}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Direct Partner</span>
-                        )}
-                      </td>
-
-                      {/* Total Allocated */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
-                          {admin.assignedCount?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* Visual Sales Progress Bar */}
-                      <td className="py-3.5 px-4 min-w-[130px]">
-                        <div className="space-y-1">
-                          <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex">
-                            {cfgPct > 0 && (
-                              <div
-                                style={{ width: `${cfgPct}%` }}
-                                className="h-full bg-black"
-                                title={`Active: ${admin.configuredCount} (${cfgPct}%)`}
-                              />
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                            <span className="font-bold text-black">{cfgPct}% active</span>
-                            <span>{admin.configuredCount || 0} of {admin.assignedCount || 0}</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Configured Count */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs bg-slate-100 px-2.5 py-1 rounded-md text-black">
-                          {admin.configuredCount?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* Ready to Sell */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md text-black">
-                          {admin.availableCount?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* Total Scans */}
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="font-mono font-bold text-xs text-slate-700">
-                          {admin.totalScans?.toLocaleString() || 0}
-                        </span>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => handleToggleStatus(admin)}
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold cursor-pointer transition-colors ${
-                            admin.status === 'active'
-                              ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
-                              : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-300'
-                          }`}
-                          title="Click to toggle active/blocked status"
-                        >
-                          {admin.status === 'active' ? 'Active' : 'Blocked'}
-                        </button>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Inspect Partner Performance */}
-                          <button
-                            onClick={() => setInspectAdminId(admin._id)}
-                            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
-                            title="Inspect partner performance & batch breakdown"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {/* Edit Partner Profile */}
-                          <button
-                            onClick={() => setEditAdmin(admin)}
-                            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
-                            title="Edit partner profile details"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-
-                          {/* Quick Assign Inventory */}
-                          <button
-                            onClick={() => setAssignAdmin(admin)}
-                            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
-                            title="Allocate QR inventory to this partner"
-                          >
-                            <UserCheck className="w-4 h-4" />
-                          </button>
-
-                          {/* View QRs in Dashboard */}
-                          <button
-                            onClick={() => navigate(`/?adminId=${admin._id}`)}
-                            className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
-                            title="View all QRs assigned to this partner on Dashboard"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </button>
-
-                          {/* Delete Partner */}
-                          <button
-                            onClick={() => handleDeleteAdmin(admin)}
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                            title="Delete Admin"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PrimeDataTable
+        data={filteredAdmins}
+        columns={columns}
+        loading={loading}
+        rowKey="_id"
+        paginator={true}
+        rows={10}
+        rowsPerPageOptions={[10, 25, 50, 100]}
+        tableClassName="min-w-[950px] w-full text-left text-xs sm:text-sm border-collapse"
+        emptyIcon={Users}
+        emptyMessage="No Admins Match Filters"
+        emptyAction={
+          hasActiveFilters ? (
+            <button
+              onClick={handleResetFilters}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-black inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Clear Filters</span>
+            </button>
+          ) : null
+        }
+      />
 
       {/* Add Admin Modal */}
       {isAddModalOpen && (
@@ -743,6 +778,25 @@ export default function AdminsPage() {
                   placeholder="Apex Hospitality Standees"
                   className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Custom Brand Domain (Whitelabel)
+                  </label>
+                  <span className="text-[10px] text-slate-400">Optional</span>
+                </div>
+                <input
+                  type="text"
+                  value={customDomain}
+                  onChange={(e) => setCustomDomain(e.target.value)}
+                  placeholder="e.g. qr.partnerbrand.com"
+                  className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm font-mono text-black focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-all"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  QRs allocated to this partner will automatically use this domain.
+                </p>
               </div>
 
               <div>
