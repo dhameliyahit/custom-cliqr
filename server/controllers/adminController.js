@@ -7,35 +7,49 @@ exports.getAllAdmins = async (req, res) => {
   try {
     const admins = await User.find({ role: 'admin' }).sort({ createdAt: -1 });
 
-    // Populate live counts from QrLink
-    const adminList = await Promise.all(
-      admins.map(async (admin) => {
-        const assigned = await QrLink.countDocuments({ assignedTo: admin._id });
-        const configured = await QrLink.countDocuments({
-          assignedTo: admin._id,
-          status: 'configured',
-        });
-        const totalScans = await QrLink.aggregate([
-          { $match: { assignedTo: admin._id } },
-          { $group: { _id: null, total: { $sum: '$scanCount' } } },
-        ]);
+    // Single aggregation across all links assigned to admins
+    const adminAgg = await QrLink.aggregate([
+      { $match: { assignedTo: { $ne: null } } },
+      {
+        $group: {
+          _id: '$assignedTo',
+          assigned: { $sum: 1 },
+          configured: {
+            $sum: { $cond: [{ $eq: ['$status', 'configured'] }, 1, 0] },
+          },
+          totalScans: { $sum: '$scanCount' },
+        },
+      },
+    ]);
+    const aggMap = new Map(adminAgg.map((item) => [item._id.toString(), item]));
 
-        return {
-          _id: admin._id,
-          name: admin.name,
-          email: admin.email,
-          phone: admin.phone,
-          company: admin.company,
-          status: admin.status,
-          assignedCount: assigned,
-          configuredCount: configured,
-          availableCount: assigned - configured,
-          totalScans: totalScans[0]?.total || 0,
-          sellThroughRate: assigned > 0 ? Number(((configured / assigned) * 100).toFixed(1)) : 0,
-          createdAt: admin.createdAt,
-        };
-      })
-    );
+    // Populate live counts from aggregation in O(1)
+    const adminList = admins.map((admin) => {
+      const stats = aggMap.get(admin._id.toString()) || {
+        assigned: 0,
+        configured: 0,
+        totalScans: 0,
+      };
+      const assigned = stats.assigned || 0;
+      const configured = stats.configured || 0;
+      const totalScans = stats.totalScans || 0;
+
+      return {
+        _id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        phone: admin.phone,
+        company: admin.company,
+        customDomain: admin.customDomain || '',
+        status: admin.status,
+        assignedCount: assigned,
+        configuredCount: configured,
+        availableCount: assigned - configured,
+        totalScans,
+        sellThroughRate: assigned > 0 ? Number(((configured / assigned) * 100).toFixed(1)) : 0,
+        createdAt: admin.createdAt,
+      };
+    });
 
     // Calculate aggregate KPIs across all reseller admins
     let totalAllocated = 0;
@@ -84,7 +98,7 @@ exports.getAllAdmins = async (req, res) => {
 // @route   POST /api/admins
 exports.createAdmin = async (req, res) => {
   try {
-    const { name, email, phone, password, company } = req.body;
+    const { name, email, phone, password, company, customDomain } = req.body;
 
     if (!name || !email || !phone || !password) {
       return res.status(400).json({
@@ -101,12 +115,18 @@ exports.createAdmin = async (req, res) => {
       });
     }
 
+    let cleanedCustomDomain = '';
+    if (customDomain && typeof customDomain === 'string') {
+      cleanedCustomDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    }
+
     const admin = new User({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       phone: phone.trim(),
       password,
       company: company ? company.trim() : '',
+      customDomain: cleanedCustomDomain,
       role: 'admin',
       status: 'active',
     });
@@ -133,7 +153,7 @@ exports.createAdmin = async (req, res) => {
 exports.updateAdmin = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, company, status, password } = req.body;
+    const { name, phone, company, customDomain, status, password } = req.body;
 
     const admin = await User.findOne({ _id: id, role: 'admin' });
     if (!admin) {
@@ -146,6 +166,9 @@ exports.updateAdmin = async (req, res) => {
     if (name) admin.name = name.trim();
     if (phone) admin.phone = phone.trim();
     if (company !== undefined) admin.company = company.trim();
+    if (customDomain !== undefined) {
+      admin.customDomain = customDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+    }
     if (status) admin.status = status;
     if (password) admin.password = password;
 
