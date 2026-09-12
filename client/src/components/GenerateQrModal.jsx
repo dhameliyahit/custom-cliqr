@@ -63,7 +63,7 @@ export default function GenerateQrModal({
         toast.success(data.message || `Generated ${num} QR links successfully!`, {
           icon: '📋',
         });
-        onSuccess?.();
+        onSuccess?.(data, selectedAdminId || null);
         onClose();
       }
     } catch (err) {
