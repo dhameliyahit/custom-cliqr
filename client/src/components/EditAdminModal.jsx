@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Users, Building2, Mail, Phone, Lock, Save, Loader2 } from 'lucide-react';
+import { X, Users, Building2, Mail, Phone, Lock, Save, Loader2, Globe, HelpCircle } from 'lucide-react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -10,6 +10,7 @@ export default function EditAdminModal({ isOpen, onClose, admin, onSuccess }) {
   const [customDomain, setCustomDomain] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showDnsHelp, setShowDnsHelp] = useState(false);
 
   useEffect(() => {
     if (admin) {
@@ -120,7 +121,17 @@ export default function EditAdminModal({ isOpen, onClose, admin, onSuccess }) {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Custom Brand Domain (Whitelabel)
               </label>
-              <span className="text-[10px] text-slate-400">Optional</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400">Optional</span>
+                <button
+                  type="button"
+                  onClick={() => setShowDnsHelp(!showDnsHelp)}
+                  className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                  <span>{showDnsHelp ? 'Hide Guide' : 'Setup Guide'}</span>
+                </button>
+              </div>
             </div>
             <input
               type="text"
@@ -132,6 +143,21 @@ export default function EditAdminModal({ isOpen, onClose, admin, onSuccess }) {
             <p className="text-[10px] text-slate-400 mt-1">
               QRs allocated to this partner will use this domain instead of the default.
             </p>
+            
+            {showDnsHelp && (
+              <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-2 animate-fade-in">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 uppercase tracking-wider text-[10px]">
+                  <Globe className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>DNS Setup Instructions for Partner</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 leading-relaxed text-[11px] pl-1">
+                  <li>Ask the partner to log into their domain provider (e.g., GoDaddy, Cloudflare).</li>
+                  <li>Create a <strong>CNAME record</strong> pointing their subdomain (e.g., <code className="bg-white px-1 py-0.5 rounded border">qr</code>) to <strong className="text-emerald-700">qr.customcliq.com</strong>.</li>
+                  <li>Alternatively, create an <strong>A record</strong> pointing to <strong className="text-emerald-700">88.222.243.36</strong> or <strong className="text-emerald-700">91.108.106.179</strong>.</li>
+                  <li>Wait for DNS to propagate. All QR scans will then transparently route through their domain!</li>
+                </ol>
+              </div>
+            )}
           </div>
 
           <div>

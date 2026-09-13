@@ -466,12 +466,12 @@ export default function SettingsPage() {
                     <li>
                       Create a <strong className="text-black">CNAME Record</strong>:
                       Set Host/Name to your subdomain (e.g. <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-black">qr</code>)
-                      pointing to your server host or domain.
+                      pointing to <strong className="text-emerald-700">qr.customcliq.com</strong>.
                     </li>
                     <li>
                       Or create an <strong className="text-black">A Record</strong>:
                       Set Host/Name to <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-black">qr</code>
-                      pointing to your server's public IP address.
+                      pointing to <strong className="text-emerald-700">88.222.243.36</strong> or <strong className="text-emerald-700">91.108.106.179</strong>.
                     </li>
                     <li>
                       Wait 2-5 minutes for DNS propagation, then click <strong className="text-black">"Verify DNS & Reachability"</strong> above.
