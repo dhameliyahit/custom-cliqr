@@ -39,8 +39,35 @@ function doPost(e) {
         var numCols = Math.max(sheet.getLastColumn(), 12);
         sheet.getRange(2, 1, lastRow - 1, numCols).clearContent();
       }
+      var newRows = [];
       for (var i = 0; i < contents.leads.length; i++) {
-        upsertLeadRow(sheet, contents.leads[i]);
+        var lead = contents.leads[i];
+        if (lead.isSpacer || (!lead.code && !lead.batchCode)) {
+          newRows.push(['', '', '', '', '', '', '', '', '', '', '', '']);
+        } else {
+          var rawPhone = (lead.customerPhone || '').toString().trim();
+          var phoneCell = rawPhone;
+          if (phoneCell && phoneCell.indexOf('+') === 0 && phoneCell.indexOf("'") !== 0) {
+            phoneCell = "'" + phoneCell;
+          }
+          newRows.push([
+            lead.code || '',
+            lead.batchCode || '',
+            lead.businessName || '',
+            lead.customerName || '',
+            phoneCell,
+            lead.customerEmail || '',
+            lead.redirectUrl || '',
+            lead.directUrl || '',
+            lead.adminName || '',
+            lead.status || '',
+            lead.scanCount || 0,
+            lead.updatedAt || new Date().toLocaleString()
+          ]);
+        }
+      }
+      if (newRows.length > 0) {
+        sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 12).setValues(newRows);
       }
       return ContentService.createTextOutput(JSON.stringify({ success: true, syncedCount: contents.leads.length }))
         .setMimeType(ContentService.MimeType.JSON);
