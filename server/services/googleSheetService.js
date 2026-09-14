@@ -1,7 +1,7 @@
 const Setting = require('../models/Setting');
 
 const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
- * CustomCliq — Google Sheet Webhook for Real-Time QR Leads Sync
+ * CustomCliq — Google Sheet Webhook for Real-Time QR Leads Sync & Live Dashboard
  * 
  * Setup Instructions:
  * 1. Open your Google Sheet.
@@ -13,7 +13,7 @@ const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
  * 7. Set:
  *    - Description: "CustomCliq Leads Sync"
  *    - Execute as: "Me"
- *    - Who has access: "Anyone" (Essential for webhook receipt)
+ *    - Who has access: "Anyone" (Crucial for webhook receipt)
  * 8. Click "Deploy", authorize access with your Google account, and copy the "Web app URL".
  * 9. Paste that URL into CustomCliq SuperAdmin Settings and click "Test Connection"!
  */
@@ -24,74 +24,166 @@ function doPost(e) {
     var contents = e.postData ? JSON.parse(e.postData.contents) : {};
     var action = contents.action || 'upsert';
 
-    // Auto-create formatted headers if sheet is empty
-    ensureHeaders(sheet);
+    // Auto-create formatted KPI dashboard headers and table layout
+    ensureSheetLayout(sheet);
 
     if (action === 'test') {
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'CustomCliq connection verified successfully!' }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        message: 'CustomCliq connection verified successfully! Dashboard and table initialized.'
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (action === 'batch_upsert' && Array.isArray(contents.leads)) {
-      // Clear data from row 2 downwards on full sync if requested
-      if (contents.clearFirst && sheet.getLastRow() > 1) {
-        var lastRow = sheet.getLastRow();
+    // Full Sync / Batch Upsert (Writes entire lead database atomically)
+    if ((action === 'batch_upsert' || action === 'full_sync') && Array.isArray(contents.leads)) {
+      var lastRow = sheet.getLastRow();
+      // Clear previous data rows from Row 6 down
+      if (lastRow >= 6) {
         var numCols = Math.max(sheet.getLastColumn(), 12);
-        sheet.getRange(2, 1, lastRow - 1, numCols).clearContent();
+        sheet.getRange(6, 1, lastRow - 5, numCols).clearContent();
       }
+
       var newRows = [];
       for (var i = 0; i < contents.leads.length; i++) {
         var lead = contents.leads[i];
-        if (lead.isSpacer || (!lead.code && !lead.batchCode)) {
-          newRows.push(['', '', '', '', '', '', '', '', '', '', '', '']);
-        } else {
-          var rawPhone = (lead.customerPhone || '').toString().trim();
-          var phoneCell = rawPhone;
-          if (phoneCell && phoneCell.indexOf('+') === 0 && phoneCell.indexOf("'") !== 0) {
-            phoneCell = "'" + phoneCell;
-          }
-          newRows.push([
-            lead.code || '',
-            lead.batchCode || '',
-            lead.businessName || '',
-            lead.customerName || '',
-            phoneCell,
-            lead.customerEmail || '',
-            lead.redirectUrl || '',
-            lead.directUrl || '',
-            lead.adminName || '',
-            lead.status || '',
-            lead.scanCount || 0,
-            lead.updatedAt || new Date().toLocaleString()
-          ]);
+        if (!lead || (!lead.code && !lead.batchCode)) continue;
+
+        var rawPhone = (lead.customerPhone || '').toString().trim();
+        var phoneCell = rawPhone;
+        if (phoneCell && phoneCell.indexOf('+') === 0 && phoneCell.indexOf("'") !== 0) {
+          phoneCell = "'" + phoneCell;
         }
+
+        newRows.push([
+          lead.code || '',
+          lead.batchCode || '',
+          lead.businessName || '',
+          lead.customerName || '',
+          phoneCell,
+          lead.customerEmail || '',
+          lead.redirectUrl || '',
+          lead.directUrl || '',
+          lead.adminName || '',
+          (lead.status || 'UNASSIGNED').toUpperCase(),
+          Number(lead.scanCount) || 0,
+          lead.updatedAt || new Date().toLocaleString()
+        ]);
       }
+
       if (newRows.length > 0) {
-        sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 12).setValues(newRows);
+        sheet.getRange(6, 1, newRows.length, 12).setValues(newRows);
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, syncedCount: contents.leads.length }))
-        .setMimeType(ContentService.MimeType.JSON);
+
+      // Update Last Synced timestamp in KPI card
+      sheet.getRange('H1').setValue(contents.syncTime || new Date().toLocaleString());
+
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        syncedCount: newRows.length
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Single Lead Upsert
+    // Single Lead Real-time Upsert
     var lead = contents.lead || contents;
     if (lead && lead.code) {
       upsertLeadRow(sheet, lead);
-      return ContentService.createTextOutput(JSON.stringify({ success: true, code: lead.code }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        code: lead.code
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Invalid payload: missing QR code' }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      message: 'Invalid payload: missing QR code or lead data'
+    })).setMimeType(ContentService.MimeType.JSON);
+
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-function ensureHeaders(sheet) {
-  if (sheet.getLastRow() === 0) {
-    var headers = [
+/**
+ * Initializes the Top KPI Dashboard Header and frozen Table Headers
+ */
+function ensureSheetLayout(sheet) {
+  var lastRow = sheet.getLastRow();
+  var a5Value = '';
+  try {
+    a5Value = sheet.getRange('A5').getValue();
+  } catch (e) {}
+
+  if (lastRow < 5 || a5Value !== 'QR Code') {
+    sheet.clear();
+
+    // 1. TOP TITLE BANNER (Row 1)
+    sheet.getRange('A1:F1').merge();
+    sheet.getRange('A1').setValue('CUSTOMCLIQ LIVE LEADS & QR DASHBOARD')
+      .setFontWeight('bold')
+      .setFontSize(12)
+      .setBackground('#0f172a')
+      .setFontColor('#ffffff')
+      .setVerticalAlignment('middle');
+
+    sheet.getRange('G1').setValue('Last Synced:')
+      .setFontWeight('bold')
+      .setFontSize(10)
+      .setBackground('#1e293b')
+      .setFontColor('#94a3b8')
+      .setHorizontalAlignment('right');
+
+    sheet.getRange('H1:L1').merge();
+    sheet.getRange('H1').setValue(new Date().toLocaleString())
+      .setFontWeight('bold')
+      .setFontSize(10)
+      .setBackground('#1e293b')
+      .setFontColor('#38bdf8');
+
+    // 2. KPI METRIC LABELS (Row 2)
+    var kpiHeaders = [
+      'Total QRs',
+      'Configured Leads',
+      'Assigned QRs',
+      'Unassigned QRs',
+      'Total Scans',
+      'Integration Status'
+    ];
+    var kpiHeaderRange = sheet.getRange('A2:F2');
+    kpiHeaderRange.setValues([kpiHeaders])
+      .setFontWeight('bold')
+      .setFontSize(9)
+      .setBackground('#f1f5f9')
+      .setFontColor('#475569')
+      .setHorizontalAlignment('center');
+
+    // 3. KPI METRIC DYNAMIC FORMULAS (Row 3)
+    var kpiFormulas = [
+      '=IFERROR(COUNTA(A6:A), 0)',
+      '=IFERROR(COUNTIF(J6:J, "CONFIGURED"), 0)',
+      '=IFERROR(COUNTIF(J6:J, "ASSIGNED"), 0)',
+      '=IFERROR(COUNTIF(J6:J, "UNASSIGNED"), 0)',
+      '=IFERROR(SUM(K6:K), 0)',
+      'ACTIVE'
+    ];
+    var kpiFormulaRange = sheet.getRange('A3:F3');
+    kpiFormulaRange.setValues([kpiFormulas])
+      .setFontWeight('bold')
+      .setFontSize(12)
+      .setBackground('#ffffff')
+      .setFontColor('#0f172a')
+      .setHorizontalAlignment('center');
+
+    // Accent borders on KPI cards
+    kpiFormulaRange.setBorder(true, true, true, true, true, true, '#cbd5e1', SpreadsheetApp.BorderStyle.SOLID);
+
+    // 4. SEPARATOR (Row 4 is blank)
+    sheet.setRowHeight(4, 12);
+
+    // 5. DATA TABLE HEADERS (Row 5)
+    var tableHeaders = [
       'QR Code',
       'Batch Code',
       'Business Name',
@@ -105,23 +197,22 @@ function ensureHeaders(sheet) {
       'Scan Count',
       'Last Updated'
     ];
-    sheet.appendRow(headers);
-    var headerRange = sheet.getRange(1, 1, 1, headers.length);
-    headerRange.setBackground('#000000');
-    headerRange.setFontColor('#ffffff');
-    headerRange.setFontWeight('bold');
-    sheet.setFrozenRows(1);
+    var tableHeaderRange = sheet.getRange('A5:L5');
+    tableHeaderRange.setValues([tableHeaders])
+      .setBackground('#1e293b')
+      .setFontColor('#ffffff')
+      .setFontWeight('bold')
+      .setFontSize(10)
+      .setHorizontalAlignment('left');
+
+    sheet.setFrozenRows(5);
   }
 }
 
+/**
+ * Upsert a single lead row in place or prepend at row 6
+ */
 function upsertLeadRow(sheet, lead) {
-  // Append an empty row for spacing
-  if (lead.isSpacer || (!lead.code && !lead.batchCode)) {
-    sheet.appendRow(['', '', '', '', '', '', '', '', '', '', '', '']);
-    return;
-  }
-
-  // Prepend single quote ' if phone starts with + so Google Sheets never interprets it as a formula
   var rawPhone = (lead.customerPhone || '').toString().trim();
   var phoneCell = rawPhone;
   if (phoneCell && phoneCell.indexOf('+') === 0 && phoneCell.indexOf("'") !== 0) {
@@ -138,37 +229,43 @@ function upsertLeadRow(sheet, lead) {
     lead.redirectUrl || '',
     lead.directUrl || '',
     lead.adminName || '',
-    lead.status || '',
-    lead.scanCount || 0,
+    (lead.status || 'UNASSIGNED').toUpperCase(),
+    Number(lead.scanCount) || 0,
     lead.updatedAt || new Date().toLocaleString()
   ];
 
   var lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    var codes = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  if (lastRow >= 6) {
+    var codes = sheet.getRange(6, 1, lastRow - 5, 1).getValues();
+    var targetCode = (lead.code || '').trim().toUpperCase();
     for (var i = 0; i < codes.length; i++) {
-      if (codes[i][0] && codes[i][0].toString().trim().toUpperCase() === (lead.code || '').trim().toUpperCase()) {
-        // Update existing row
-        var targetRow = i + 2;
+      if (codes[i][0] && codes[i][0].toString().trim().toUpperCase() === targetCode) {
+        // Update existing row in-place
+        var targetRow = i + 6;
         sheet.getRange(targetRow, 1, 1, rowData.length).setValues([rowData]);
+        sheet.getRange('H1').setValue(new Date().toLocaleString());
         return;
       }
     }
   }
 
-  // If not found in the sheet:
-  // If it's an active configured lead, insert it right at row 2 (at the top of configured leads)
-  if (lead.status === 'CONFIGURED') {
-    sheet.insertRowBefore(2);
-    sheet.getRange(2, 1, 1, rowData.length).setValues([rowData]);
+  // If not found in sheet:
+  // If active configured lead, insert at top of table (Row 6)
+  if ((lead.status || '').toUpperCase() === 'CONFIGURED') {
+    sheet.insertRowBefore(6);
+    sheet.getRange(6, 1, 1, rowData.length).setValues([rowData]);
   } else {
     sheet.appendRow(rowData);
   }
+  sheet.getRange('H1').setValue(new Date().toLocaleString());
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ success: true, service: 'CustomCliq Google Sheet Sync Active' }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    service: 'CustomCliq Google Sheet Sync Active',
+    version: '2.0.0'
+  })).setMimeType(ContentService.MimeType.JSON);
 }`;
 
 /**
@@ -196,7 +293,7 @@ const formatLeadPayload = (link, baseDomain = '') => {
     redirectUrl: link.redirectUrl || '',
     directUrl: `${baseDomain}/r/${link.code}`,
     adminName: link.assignedTo ? (link.assignedTo.name || 'Admin') : 'Unassigned',
-    status: (link.status || 'READY').toUpperCase(),
+    status: (link.status || 'UNASSIGNED').toUpperCase(),
     scanCount: link.scanCount || 0,
     updatedAt: new Date(link.updatedAt || link.createdAt || Date.now()).toLocaleString(),
   };
@@ -207,7 +304,6 @@ const formatLeadPayload = (link, baseDomain = '') => {
  */
 const syncLeadToGoogleSheet = async (link, baseDomain = '') => {
   try {
-    // Check if sync is enabled
     const [enabledSetting, urlSetting] = await Promise.all([
       Setting.findOne({ key: 'google_sheet_sync_enabled' }),
       Setting.findOne({ key: 'google_sheet_webhook_url' }),
@@ -225,9 +321,8 @@ const syncLeadToGoogleSheet = async (link, baseDomain = '') => {
       lead: formatLeadPayload(link, baseDomain),
     };
 
-    // Asynchronous dispatch with 6s timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const DEFAULT_HEADERS = {
       'Content-Type': 'application/json',
@@ -240,7 +335,7 @@ const syncLeadToGoogleSheet = async (link, baseDomain = '') => {
       headers: DEFAULT_HEADERS,
       body: JSON.stringify(payload),
       signal: controller.signal,
-      redirect: 'follow', // Google Apps Script redirects with 302 to script.googleusercontent.com
+      redirect: 'follow',
     })
       .then((res) => {
         if (!res.ok && res.status !== 302) {
@@ -280,7 +375,7 @@ const testGoogleSheetWebhook = async (webhookUrl) => {
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
     const response = await fetch(webhookUrl.trim(), {
@@ -300,7 +395,7 @@ const testGoogleSheetWebhook = async (webhookUrl) => {
     if (!response.ok && response.status !== 302) {
       if (response.status === 403) {
         throw new Error(
-          'Google Webhook returned 403 Forbidden: Access denied. In Apps Script, go to Deploy > Manage deployments > Edit, and change "Who has access" to "Anyone" (NOT "Only myself"), then ensure the URL ends with /exec.'
+          'Google Webhook returned 403 Forbidden: Access denied. In Apps Script, click Deploy > Manage deployments > Edit, change "Who has access" to "Anyone" (NOT "Only myself"), and verify the URL ends with /exec.'
         );
       }
       throw new Error(`Google Webhook returned HTTP status ${response.status}`);
@@ -316,42 +411,23 @@ const testGoogleSheetWebhook = async (webhookUrl) => {
 
     return {
       success: true,
-      message: 'Google Sheet Webhook verified successfully! Headers and connection are active.',
+      message: 'Google Sheet Webhook verified successfully! KPI Dashboard and Lead table initialized.',
       data,
     };
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
-      throw new Error('Connection timed out after 8 seconds. Ensure the Apps Script deployment access is set to "Anyone".');
+      throw new Error('Connection timed out after 10 seconds. Ensure the Apps Script deployment access is set to "Anyone".');
     }
     throw new Error(`Connection test failed: ${err.message}`);
   }
 };
 
 /**
- * Helper to build an empty spacer lead object
- */
-const createSpacerLead = () => ({
-  code: '',
-  batchCode: '',
-  businessName: '',
-  customerName: '',
-  customerPhone: '',
-  customerEmail: '',
-  redirectUrl: '',
-  directUrl: '',
-  adminName: '',
-  status: '',
-  scanCount: '',
-  updatedAt: '',
-  isSpacer: true,
-});
-
-/**
- * Bulk sync all QR links to Google Sheets
- * - Configured QRs (active leads) placed at top
- * - 2 blank spacer rows
- * - All remaining QRs (assigned, unassigned, inactive) placed below
+ * Bulk sync ALL QR links to Google Sheet in ONE atomic, reliable payload
+ * - All leads continuous with NO blank spacer rows
+ * - Configured leads at top, followed by assigned and unassigned QRs
+ * - Automatically updates Top KPI metrics
  */
 const syncAllLinksToGoogleSheet = async (linksOrData, baseDomain = '', webhookUrl) => {
   let targetUrl = webhookUrl;
@@ -364,61 +440,36 @@ const syncAllLinksToGoogleSheet = async (linksOrData, baseDomain = '', webhookUr
     throw new Error('Google Sheet Webhook URL is not configured. Please save a valid Webhook URL first.');
   }
 
-  let structuredLeads = [];
-  let configuredCount = 0;
-  let otherCount = 0;
-
+  let rawLinks = [];
   if (Array.isArray(linksOrData)) {
-    const configured = linksOrData.filter((l) => l.status === 'configured');
-    const others = linksOrData.filter((l) => l.status !== 'configured');
-    configuredCount = configured.length;
-    otherCount = others.length;
-
-    // 1. All configured leads at the top
-    structuredLeads.push(...configured.map((l) => formatLeadPayload(l, baseDomain)));
-
-    // 2. Add 2 blank spacer rows if configured leads exist and others exist
-    if (configured.length > 0 && others.length > 0) {
-      structuredLeads.push(createSpacerLead());
-      structuredLeads.push(createSpacerLead());
-    }
-
-    // 3. All other leads below
-    structuredLeads.push(...others.map((l) => formatLeadPayload(l, baseDomain)));
+    rawLinks = linksOrData;
   } else if (linksOrData && (linksOrData.configuredLinks || linksOrData.otherLinks)) {
-    const configured = linksOrData.configuredLinks || [];
-    const others = linksOrData.otherLinks || [];
-    configuredCount = configured.length;
-    otherCount = others.length;
-
-    // 1. All configured leads at the top
-    structuredLeads.push(...configured.map((l) => formatLeadPayload(l, baseDomain)));
-
-    // 2. Add 2 blank spacer rows if configured leads exist and others exist
-    if (configured.length > 0 && others.length > 0) {
-      structuredLeads.push(createSpacerLead());
-      structuredLeads.push(createSpacerLead());
-    }
-
-    // 3. All other leads below
-    structuredLeads.push(...others.map((l) => formatLeadPayload(l, baseDomain)));
+    rawLinks = [...(linksOrData.configuredLinks || []), ...(linksOrData.otherLinks || [])];
   }
 
-  if (structuredLeads.length === 0) {
-    throw new Error('No QR links found in the system to sync');
+  if (rawLinks.length === 0) {
+    throw new Error('No QR links found in the system to sync yet');
   }
 
-  // Chunk in batches of 50 to avoid Google Apps Script execution timeouts
-  const CHUNK_SIZE = 50;
-  let totalSynced = 0;
+  // Sort: Configured leads first, then assigned, then unassigned
+  rawLinks.sort((a, b) => {
+    const order = { configured: 1, assigned: 2, unassigned: 3, inactive: 4 };
+    const orderA = order[a.status] || 5;
+    const orderB = order[b.status] || 5;
+    if (orderA !== orderB) return orderA - orderB;
+    return new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0);
+  });
 
-  for (let i = 0; i < structuredLeads.length; i += CHUNK_SIZE) {
-    const chunk = structuredLeads.slice(i, i + CHUNK_SIZE);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+  const formattedLeads = rawLinks.map((l) => formatLeadPayload(l, baseDomain));
 
-    const isFirstChunk = (i === 0);
+  const configuredCount = rawLinks.filter((l) => l.status === 'configured').length;
+  const assignedCount = rawLinks.filter((l) => l.status === 'assigned').length;
+  const unassignedCount = rawLinks.filter((l) => l.status === 'unassigned').length;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 35000);
+
+  try {
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
@@ -427,38 +478,51 @@ const syncAllLinksToGoogleSheet = async (linksOrData, baseDomain = '', webhookUr
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
       body: JSON.stringify({
-        action: 'batch_upsert',
-        clearFirst: isFirstChunk,
-        leads: chunk,
+        action: 'full_sync',
+        leads: formattedLeads,
+        syncTime: new Date().toLocaleString(),
       }),
       signal: controller.signal,
       redirect: 'follow',
     });
 
     clearTimeout(timeoutId);
+
     if (!response.ok && response.status !== 302) {
       if (response.status === 403) {
         throw new Error(
-          'Google Sheet returned 403 Forbidden: Access denied. In Google Apps Script, click Deploy > Manage deployments > Edit, and change "Who has access" from "Only myself" to "Anyone", then re-deploy and verify the URL ends with /exec.'
+          'Google Sheet returned 403 Forbidden: Access denied. In Google Apps Script, click Deploy > Manage deployments > Edit, change "Who has access" to "Anyone", and re-deploy.'
         );
       }
-      throw new Error(`Google Sheet returned status ${response.status} during batch sync`);
+      throw new Error(`Google Sheet returned status ${response.status} during full sync`);
     }
 
-    totalSynced += chunk.length;
+    const resText = await response.text();
+    let resData = {};
+    try {
+      resData = JSON.parse(resText);
+    } catch (e) {
+      resData = { raw: resText };
+    }
+
+    const message = `Successfully synchronized ALL ${formattedLeads.length} QR links (${configuredCount} configured, ${assignedCount} assigned, ${unassignedCount} unassigned) to your Google Sheet!`;
+
+    return {
+      success: true,
+      totalSynced: formattedLeads.length,
+      configuredCount,
+      assignedCount,
+      unassignedCount,
+      message,
+      data: resData,
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Google Sheet full sync timed out after 35 seconds. Please verify your Webhook URL.');
+    }
+    throw err;
   }
-
-  const message = configuredCount > 0
-    ? `Successfully synchronized ${configuredCount} configured lead(s) at the top, followed by 2 blank rows, and ${otherCount} other QR(s)!`
-    : `Successfully synchronized ${otherCount} QR link(s) into your Google Sheet!`;
-
-  return {
-    success: true,
-    totalSynced,
-    configuredCount,
-    otherCount,
-    message,
-  };
 };
 
 module.exports = {
