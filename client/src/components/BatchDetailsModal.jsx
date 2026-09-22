@@ -15,6 +15,8 @@ import {
   Loader2,
   AlertCircle,
   TrendingUp,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { getBatchDetails } from '../services/api';
 import toast from 'react-hot-toast';
@@ -25,6 +27,8 @@ export default function BatchDetailsModal({
   batchCode,
   onAssign,
   onExport,
+  onEdit,
+  onDelete,
 }) {
   const navigate = useNavigate();
   const [details, setDetails] = useState(null);
@@ -352,6 +356,34 @@ export default function BatchDetailsModal({
               >
                 <UserCheck className="w-3.5 h-3.5" />
                 <span>Assign to Admin</span>
+              </button>
+            )}
+
+            {/* Edit Batch */}
+            {onEdit && batch && (
+              <button
+                onClick={() => {
+                  onEdit(batch);
+                }}
+                className="px-3 py-2 bg-white border border-slate-300 hover:border-black rounded-lg text-xs font-bold text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Edit batch code or notes"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Edit Batch</span>
+              </button>
+            )}
+
+            {/* Delete Batch */}
+            {onDelete && batch && (
+              <button
+                onClick={() => {
+                  onDelete(batch);
+                }}
+                className="px-3 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                title="Delete batch and associated QR codes"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
               </button>
             )}
 

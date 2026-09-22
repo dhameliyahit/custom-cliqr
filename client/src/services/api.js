@@ -185,6 +185,16 @@ export const getBatchDetails = async (batchCode) => {
   return response.data;
 };
 
+export const updateBatch = async (batchCode, data) => {
+  const response = await api.put(`/qr/batches/${encodeURIComponent(batchCode)}`, data);
+  return response.data;
+};
+
+export const deleteBatch = async (batchCode) => {
+  const response = await api.delete(`/qr/batches/${encodeURIComponent(batchCode)}`);
+  return response.data;
+};
+
 export const getAdminDetails = async (adminId) => {
   const response = await api.get(`/admins/${adminId}/details`);
   return response.data;

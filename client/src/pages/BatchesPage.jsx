@@ -20,12 +20,16 @@ import {
   ExternalLink,
   Percent,
   User,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api, { downloadExportFile } from '../services/api';
 import AssignModal from '../components/AssignModal';
 import GenerateQrModal from '../components/GenerateQrModal';
 import BatchDetailsModal from '../components/BatchDetailsModal';
+import EditBatchModal from '../components/EditBatchModal';
+import DeleteBatchModal from '../components/DeleteBatchModal';
 import PrimeDataTable from '../components/common/PrimeDataTable';
 import toast from 'react-hot-toast';
 
@@ -46,6 +50,8 @@ export default function BatchesPage() {
   // Modal States
   const [assignBatch, setAssignBatch] = useState(null);
   const [inspectBatchCode, setInspectBatchCode] = useState(null);
+  const [editBatch, setEditBatch] = useState(null);
+  const [deleteBatch, setDeleteBatch] = useState(null);
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
 
   const fetchBatches = async () => {
@@ -326,7 +332,7 @@ export default function BatchesPage() {
         field: 'actions',
         header: 'Actions',
         align: 'right',
-        minWidth: '220px',
+        minWidth: '280px',
         body: (batch) => (
           <div className="flex items-center justify-end gap-1.5">
             {/* Inspect Batch Drilldown Modal */}
@@ -348,6 +354,30 @@ export default function BatchesPage() {
                 title="Assign links from this batch to Admin"
               >
                 <UserCheck className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Edit Batch */}
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setEditBatch(batch)}
+                className="p-1.5 text-slate-700 hover:text-black hover:bg-slate-100 rounded-md border border-slate-200 transition-colors cursor-pointer"
+                title="Edit batch code or notes"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Delete Batch */}
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setDeleteBatch(batch)}
+                className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition-colors cursor-pointer"
+                title="Delete batch and associated QR codes"
+              >
+                <Trash2 className="w-4 h-4" />
               </button>
             )}
 
@@ -667,6 +697,29 @@ export default function BatchesPage() {
         batchCode={inspectBatchCode}
         onAssign={(b) => setAssignBatch(b)}
         onExport={handleExportBatch}
+        onEdit={(b) => setEditBatch(b)}
+        onDelete={(b) => setDeleteBatch(b)}
+      />
+
+      <EditBatchModal
+        isOpen={!!editBatch}
+        onClose={() => setEditBatch(null)}
+        batch={editBatch}
+        onSuccess={() => {
+          fetchBatches();
+        }}
+      />
+
+      <DeleteBatchModal
+        isOpen={!!deleteBatch}
+        onClose={() => setDeleteBatch(null)}
+        batch={deleteBatch}
+        onSuccess={() => {
+          fetchBatches();
+          if (inspectBatchCode === deleteBatch?.batchCode) {
+            setInspectBatchCode(null);
+          }
+        }}
       />
     </div>
   );

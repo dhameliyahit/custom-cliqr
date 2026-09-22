@@ -874,7 +874,7 @@ export default function SettingsPage() {
                   <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                     <span>
-                      Smart upsert feature: The script auto-creates styled headers on row 1 and updates existing rows by QR Code without creating duplicates.
+                      Smart upsert feature: The script auto-creates top live KPI summary cards (Rows 1-3) and frozen table headers (Row 5), syncing all leads continuously without blank spacer rows.
                     </span>
                   </p>
                 </div>

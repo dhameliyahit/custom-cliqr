@@ -20,6 +20,8 @@ router.get('/stats', qrController.getDashboardStats);
 router.get('/', qrController.getQrLinks);
 router.get('/batches', qrController.getBatches);
 router.get('/batches/:batchCode/details', requireSuperAdmin, qrController.getBatchDetails);
+router.put('/batches/:batchCode', requireSuperAdmin, qrController.updateBatch);
+router.delete('/batches/:batchCode', requireSuperAdmin, qrController.deleteBatch);
 router.get('/export', qrController.exportQrData);
 router.get('/:id/download', qrController.downloadQrCode);
 

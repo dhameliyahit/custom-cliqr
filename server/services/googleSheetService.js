@@ -75,7 +75,9 @@ function doPost(e) {
       }
 
       // Update Last Synced timestamp in KPI card
-      sheet.getRange('H1').setValue(contents.syncTime || new Date().toLocaleString());
+      try {
+        sheet.getRange('H1').setValue(contents.syncTime || new Date().toLocaleString());
+      } catch (e) {}
 
       return ContentService.createTextOutput(JSON.stringify({
         success: true,
@@ -235,29 +237,32 @@ function upsertLeadRow(sheet, lead) {
   ];
 
   var lastRow = sheet.getLastRow();
-  if (lastRow >= 6) {
+  var targetCode = (lead.code || '').trim().toUpperCase();
+
+  // 1. If data rows exist (Row 6+), search for existing QR code and update in-place
+  if (lastRow >= 6 && targetCode) {
     var codes = sheet.getRange(6, 1, lastRow - 5, 1).getValues();
-    var targetCode = (lead.code || '').trim().toUpperCase();
     for (var i = 0; i < codes.length; i++) {
       if (codes[i][0] && codes[i][0].toString().trim().toUpperCase() === targetCode) {
-        // Update existing row in-place
         var targetRow = i + 6;
         sheet.getRange(targetRow, 1, 1, rowData.length).setValues([rowData]);
-        sheet.getRange('H1').setValue(new Date().toLocaleString());
+        try { sheet.getRange('H1').setValue(new Date().toLocaleString()); } catch (e) {}
         return;
       }
     }
   }
 
-  // If not found in sheet:
-  // If active configured lead, insert at top of table (Row 6)
-  if ((lead.status || '').toUpperCase() === 'CONFIGURED') {
+  // 2. If QR not found in sheet:
+  if (lastRow < 6) {
+    sheet.getRange(6, 1, 1, rowData.length).setValues([rowData]);
+  } else if ((lead.status || '').toUpperCase() === 'CONFIGURED') {
     sheet.insertRowBefore(6);
     sheet.getRange(6, 1, 1, rowData.length).setValues([rowData]);
   } else {
     sheet.appendRow(rowData);
   }
-  sheet.getRange('H1').setValue(new Date().toLocaleString());
+
+  try { sheet.getRange('H1').setValue(new Date().toLocaleString()); } catch (e) {}
 }
 
 function doGet(e) {
@@ -313,6 +318,7 @@ const syncLeadToGoogleSheet = async (link, baseDomain = '') => {
     const webhookUrl = urlSetting ? (urlSetting.value || '').trim() : '';
 
     if (!isEnabled || !webhookUrl || !webhookUrl.startsWith('http')) {
+      console.log('[GoogleSheetSync] Real-time sync skipped: enabled =', isEnabled, 'webhookUrl =', webhookUrl ? 'set' : 'missing');
       return { skipped: true, reason: 'Sync not enabled or webhook URL missing' };
     }
 
@@ -349,7 +355,7 @@ const syncLeadToGoogleSheet = async (link, baseDomain = '') => {
       })
       .then((data) => {
         if (data && data.success) {
-          console.log(`[GoogleSheetSync] Successfully synced QR ${link.code} to Google Sheet:`, data);
+          console.log(`[GoogleSheetSync] Successfully real-time synced QR ${link.code} to Google Sheet:`, data);
         }
       })
       .catch((err) => {

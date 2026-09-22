@@ -626,6 +626,121 @@ exports.getBatchDetails = async (req, res) => {
   }
 };
 
+// @desc    Update Batch (Super Admin only - rename batchCode and/or update description)
+// @route   PUT /api/qr/batches/:batchCode
+exports.updateBatch = async (req, res) => {
+  try {
+    const { batchCode } = req.params;
+    const { batchCode: newBatchCode, description } = req.body;
+
+    if (!batchCode) {
+      return res.status(400).json({ success: false, message: 'Batch code parameter is required' });
+    }
+
+    const currentBatchCode = batchCode.toUpperCase().trim();
+    const batch = await Batch.findOne({ batchCode: currentBatchCode });
+
+    if (!batch) {
+      return res.status(404).json({ success: false, message: `Batch "${currentBatchCode}" not found` });
+    }
+
+    let updatedBatchCode = currentBatchCode;
+
+    // If new batchCode is provided and different from current
+    if (newBatchCode && newBatchCode.trim().toUpperCase() !== currentBatchCode) {
+      const cleanNewCode = newBatchCode.trim().toUpperCase();
+
+      // Check if target code already exists
+      const existing = await Batch.findOne({ batchCode: cleanNewCode });
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          message: `Batch code "${cleanNewCode}" already exists. Please choose a different code.`,
+        });
+      }
+
+      // Update batchCode on all QrLinks belonging to this batch
+      await QrLink.updateMany(
+        { batchCode: currentBatchCode },
+        { batchCode: cleanNewCode }
+      );
+
+      batch.batchCode = cleanNewCode;
+      updatedBatchCode = cleanNewCode;
+    }
+
+    if (description !== undefined) {
+      batch.description = description.trim();
+    }
+
+    await batch.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Batch "${updatedBatchCode}" updated successfully`,
+      batch: {
+        id: batch._id,
+        batchCode: batch.batchCode,
+        description: batch.description,
+        totalCount: batch.totalCount,
+        assignedCount: batch.assignedCount,
+        configuredCount: batch.configuredCount,
+        updatedAt: batch.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Update batch error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update batch: ' + error.message,
+    });
+  }
+};
+
+// @desc    Delete Batch and all its associated QR links (Super Admin only)
+// @route   DELETE /api/qr/batches/:batchCode
+exports.deleteBatch = async (req, res) => {
+  try {
+    const { batchCode } = req.params;
+
+    if (!batchCode) {
+      return res.status(400).json({ success: false, message: 'Batch code parameter is required' });
+    }
+
+    const cleanBatchCode = batchCode.toUpperCase().trim();
+    const batch = await Batch.findOne({ batchCode: cleanBatchCode });
+
+    if (!batch) {
+      return res.status(404).json({ success: false, message: `Batch "${cleanBatchCode}" not found` });
+    }
+
+    // Find all links to invalidate redirect cache
+    const links = await QrLink.find({ batchCode: cleanBatchCode }).select('code');
+    for (const link of links) {
+      invalidateRedirect(link.code);
+    }
+
+    // Delete all QR links belonging to this batch
+    const deleteResult = await QrLink.deleteMany({ batchCode: cleanBatchCode });
+
+    // Delete the batch document
+    await Batch.deleteOne({ _id: batch._id });
+
+    return res.status(200).json({
+      success: true,
+      message: `Batch "${cleanBatchCode}" and ${deleteResult.deletedCount} associated QR code(s) deleted successfully`,
+      deletedBatchCode: cleanBatchCode,
+      deletedLinksCount: deleteResult.deletedCount,
+    });
+  } catch (error) {
+    console.error('Delete batch error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete batch: ' + error.message,
+    });
+  }
+};
+
 // @desc    Assign QR Links to an Admin (by specific IDs or quantity from batch)
 // @route   POST /api/qr/assign
 exports.assignLinks = async (req, res) => {
