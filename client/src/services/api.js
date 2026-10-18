@@ -38,11 +38,26 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Auto Renew Token on 401
+// Response Interceptor: Auto Renew Token on 401 & Handle Suspension
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Handle Billing Suspension: Clear tokens and kick to /login
+    if (
+      error.response?.status === 403 &&
+      (error.response?.data?.code === 'BILLING_SUSPENDED' ||
+        error.response?.data?.message?.toLowerCase().includes('billing'))
+    ) {
+      localStorage.removeItem('customcliq_access_token');
+      localStorage.removeItem('customcliq_refresh_token');
+      localStorage.removeItem('customcliq_user');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+      return Promise.reject(error);
+    }
 
     // Skip refresh logic for login / register / refresh endpoints
     if (

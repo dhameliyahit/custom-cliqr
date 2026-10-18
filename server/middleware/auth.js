@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Setting = require('../models/Setting');
 
 const generateTokens = (userId, role) => {
   const accessToken = jwt.sign(
@@ -32,6 +33,16 @@ const verifyAccessToken = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Access denied. No authorization token provided.',
+      });
+    }
+
+    // Check service-wide billing suspension
+    const billingSetting = await Setting.findOne({ key: 'billing_suspended' });
+    if (billingSetting && billingSetting.value === true) {
+      return res.status(403).json({
+        success: false,
+        code: 'BILLING_SUSPENDED',
+        message: 'Service Suspended: Application is temporarily suspended due to pending billing.',
       });
     }
 

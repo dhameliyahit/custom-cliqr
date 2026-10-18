@@ -9,12 +9,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMessage('');
 
     try {
       const data = await login(email, password);
@@ -23,7 +25,9 @@ export default function Login() {
         navigate('/');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed. Please check credentials.');
+      const msg = err.response?.data?.message || 'Login failed. Please check credentials.';
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -113,6 +117,12 @@ export default function Login() {
             <p className="mt-0.5 text-center text-xs text-slate-500 mb-4">
               Super Admin &amp; Reseller Admin Portal
             </p>
+
+            {errorMessage && (
+              <div className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-semibold leading-relaxed text-center">
+                {errorMessage}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-3.5">
               <div>

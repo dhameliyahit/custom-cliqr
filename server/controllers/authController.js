@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Setting = require('../models/Setting');
 const { generateTokens } = require('../middleware/auth');
 
 // @desc    Login user (SuperAdmin / Admin)
@@ -12,6 +13,16 @@ exports.login = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Please provide both email and password',
+      });
+    }
+
+    // Check service-wide billing suspension
+    const billingSetting = await Setting.findOne({ key: 'billing_suspended' });
+    if (billingSetting && billingSetting.value === true) {
+      return res.status(403).json({
+        success: false,
+        code: 'BILLING_SUSPENDED',
+        message: 'Service Suspended: Account is temporarily suspended due to pending billing. Please contact the service provider to restore access.',
       });
     }
 
@@ -145,6 +156,16 @@ exports.refreshToken = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Refresh token is required',
+      });
+    }
+
+    // Check service-wide billing suspension
+    const billingSetting = await Setting.findOne({ key: 'billing_suspended' });
+    if (billingSetting && billingSetting.value === true) {
+      return res.status(403).json({
+        success: false,
+        code: 'BILLING_SUSPENDED',
+        message: 'Service Suspended: Application is temporarily suspended due to pending billing.',
       });
     }
 

@@ -1,0 +1,2 @@
+node server/scripts/set-service-status.js BILLING_SUSPENDED --invoice INV-2026-001 --amount "$1,200" --email "billing@provider.com"
+node server/scripts/set-service-status.js ACTIVE

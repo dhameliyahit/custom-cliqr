@@ -3,6 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const QrLink = require('../models/QrLink');
+const Setting = require('../models/Setting');
 const { getCachedRedirect, setCachedRedirect } = require('../services/redirectCache');
 
 // Helper to determine client URL (smart fallback for unified server vs separate dev servers)
@@ -34,6 +35,12 @@ const handleRedirect = async (req, res) => {
     const { code } = req.params;
     if (!code) return res.status(400).send('Code required');
     const cleanCode = code.toUpperCase().trim();
+
+    // Check service-wide billing suspension
+    const billing = await Setting.findOne({ key: 'billing_suspended' });
+    if (billing && billing.value === true) {
+      return res.status(402).send(`<!DOCTYPE html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Service Suspended — CustomCliq</title><style>body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #00222B; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; text-align: center; }.card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 40px 24px; max-width: 440px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }.badge { display: inline-block; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 4px 12px; border-radius: 9999px; letter-spacing: 0.05em; margin-bottom: 16px; }h1 { font-size: 22px; margin: 0 0 12px 0; font-weight: 800; color: #fff; }p { font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0; }</style></head><body><div class="card"><div class="badge">Billing Suspension</div><h1>Service Temporarily Paused</h1><p>This QR service is temporarily unavailable due to pending billing. Please contact the service provider to restore access.</p></div></body></html>`);
+    }
 
     // Optimal HTTP headers for instant redirection without stale browser caching
     res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
