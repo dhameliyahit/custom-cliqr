@@ -35,6 +35,14 @@ const userSchema = new mongoose.Schema(
       enum: ['active', 'blocked', 'pending'],
       default: 'active',
     },
+    billingSuspended: {
+      type: Boolean,
+      default: false,
+    },
+    blockReason: {
+      type: String,
+      default: '',
+    },
     company: {
       type: String,
       default: '',

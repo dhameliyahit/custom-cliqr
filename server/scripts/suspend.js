@@ -1,3 +1,7 @@
+if (!global.crypto) {
+  global.crypto = require('crypto');
+}
+
 const path = require('path');
 const fs = require('fs');
 
@@ -16,6 +20,9 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Setting = require('../models/Setting');
 
+const BILLING_MESSAGE =
+  'Service Suspended: Account is temporarily suspended due to pending billing. Please contact the service provider to restore access.';
+
 const run = async () => {
   try {
     const mongoUri =
@@ -25,59 +32,127 @@ const run = async () => {
     await mongoose.connect(mongoUri);
     console.log('[Connected] successfully.');
 
-    // Check action from command line args (e.g. node suspend.js resume)
+    // Parse command line arguments
     const args = process.argv.slice(2);
-    const action = (args[0] || 'suspend').toLowerCase().trim();
+    let action = 'suspend';
+    let targetEmail = null;
 
-    if (['resume', 'unsuspend', 'active', 'activate', 'enable'].includes(action)) {
-      // 1. UNSUSPEND / RESUME SERVICE
-      await Setting.findOneAndUpdate(
-        { key: 'billing_suspended' },
-        {
-          key: 'billing_suspended',
-          value: false,
-          description: 'Billing Suspension Flag',
-        },
-        { upsert: true }
-      );
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (['resume', 'unsuspend', 'active', 'activate', 'enable'].includes(arg.toLowerCase())) {
+        action = 'resume';
+      } else if (['suspend', 'block'].includes(arg.toLowerCase())) {
+        action = 'suspend';
+      } else if (arg === '--email' || arg === '-e') {
+        targetEmail = args[i + 1]?.toLowerCase().trim();
+        i++;
+      } else if (arg.startsWith('--email=')) {
+        targetEmail = arg.split('=')[1]?.toLowerCase().trim();
+      } else if (arg.includes('@') && !arg.startsWith('-')) {
+        targetEmail = arg.toLowerCase().trim();
+      }
+    }
 
-      console.log('\n=============================================================');
-      console.log('  CUSTOMCLIQ — SERVICE RESTORED (ACTIVE)');
-      console.log('=============================================================');
-      console.log('  [✓] Billing suspension flag removed (value: false)');
-      console.log('  [✓] SuperAdmin and Admin logins are restored');
-      console.log('  [✓] All QR code redirections are active again');
-      console.log('=============================================================\n');
+    if (targetEmail) {
+      // =========================================================
+      // TARGETED SUSPENSION / RESTORATION FOR SPECIFIC EMAIL
+      // =========================================================
+      const user = await User.findOne({ email: targetEmail });
+      if (!user) {
+        console.error(`\n[Error] No user found with email: "${targetEmail}"`);
+        await mongoose.disconnect();
+        process.exit(1);
+      }
+
+      if (action === 'resume') {
+        user.billingSuspended = false;
+        user.status = 'active';
+        user.blockReason = '';
+        await user.save();
+
+        console.log('\n=============================================================');
+        console.log('  CUSTOMCLIQ — USER ACCOUNT RESTORED (ACTIVE)');
+        console.log('=============================================================');
+        console.log(`  [✓] Target User   : ${user.name} (${user.email})`);
+        console.log(`  [✓] Role          : ${user.role}`);
+        console.log(`  [✓] Status        : active (billingSuspended = false)`);
+        console.log(`  [✓] Login and API access restored for this account`);
+        console.log('=============================================================\n');
+      } else {
+        // Suspend specific user for billing
+        user.billingSuspended = true;
+        user.status = 'blocked';
+        user.blockReason = BILLING_MESSAGE;
+        user.refreshTokens = []; // Force logout from all active sessions
+        await user.save();
+
+        console.log('\n=============================================================');
+        console.log('  CUSTOMCLIQ — USER ACCOUNT SUSPENDED FOR BILLING');
+        console.log('=============================================================');
+        console.log(`  [✓] Target User   : ${user.name} (${user.email})`);
+        console.log(`  [✓] Role          : ${user.role}`);
+        console.log(`  [✓] Status        : blocked (billingSuspended = true)`);
+        console.log(`  [✓] Active sessions terminated immediately (logged out)`);
+        console.log(`  [✓] When this user logs in, they will see:`);
+        console.log(`      "${BILLING_MESSAGE}"`);
+        console.log('-------------------------------------------------------------');
+        console.log('  To reactivate this user, run:');
+        console.log(`    node server/scripts/suspend.js resume --email ${user.email}`);
+        console.log(`    or: node server/scripts/unsuspend.js --email ${user.email}`);
+        console.log('=============================================================\n');
+      }
     } else {
-      // 2. SUSPEND SERVICE FOR BILLING
-      await Setting.findOneAndUpdate(
-        { key: 'billing_suspended' },
-        {
-          key: 'billing_suspended',
-          value: true,
-          description: 'Billing Suspension Flag',
-        },
-        { upsert: true }
-      );
+      // =========================================================
+      // SYSTEM-WIDE SUSPENSION / RESTORATION FOR ALL USERS
+      // =========================================================
+      if (action === 'resume') {
+        // Resume all
+        await Setting.findOneAndUpdate(
+          { key: 'billing_suspended' },
+          { key: 'billing_suspended', value: false, description: 'Billing Suspension Flag' },
+          { upsert: true }
+        );
 
-      // Invalidate all active user sessions by wiping refresh tokens
-      const result = await User.updateMany({}, { $set: { refreshTokens: [] } });
+        // Also reset any accounts that had billingSuspended flag
+        await User.updateMany(
+          { billingSuspended: true },
+          { $set: { billingSuspended: false, status: 'active', blockReason: '' } }
+        );
 
-      console.log('\n=============================================================');
-      console.log('  CUSTOMCLIQ — BILLING SUSPENSION ACTIVATED');
-      console.log('=============================================================');
-      console.log('  [✓] Billing suspension flag enabled in database');
-      console.log(`  [✓] Logged out all users (${result.modifiedCount} accounts terminated)`);
-      console.log('  [✓] All active sessions terminated immediately');
-      console.log('  [✓] Login attempts will now display:');
-      console.log('      "Service Suspended: Account is temporarily suspended due to pending billing. Please contact the service provider to restore access."');
-      console.log('  [✓] QR code scans will show Billing Suspension screen');
-      console.log('  [✓] Client business data remains 100% safe & intact');
-      console.log('-------------------------------------------------------------');
-      console.log('  To reactivate the service when payment is settled, run:');
-      console.log('    node server/scripts/suspend.js resume');
-      console.log('    or: node server/scripts/unsuspend.js');
-      console.log('=============================================================\n');
+        console.log('\n=============================================================');
+        console.log('  CUSTOMCLIQ — SERVICE RESTORED (ACTIVE)');
+        console.log('=============================================================');
+        console.log('  [✓] Global billing suspension removed (billing_suspended = false)');
+        console.log('  [✓] SuperAdmin and Admin logins restored');
+        console.log('  [✓] All QR code redirections are active again');
+        console.log('=============================================================\n');
+      } else {
+        // Suspend all
+        await Setting.findOneAndUpdate(
+          { key: 'billing_suspended' },
+          { key: 'billing_suspended', value: true, description: 'Billing Suspension Flag' },
+          { upsert: true }
+        );
+
+        // Invalidate all active user sessions by wiping refresh tokens
+        const result = await User.updateMany({}, { $set: { refreshTokens: [] } });
+
+        console.log('\n=============================================================');
+        console.log('  CUSTOMCLIQ — ALL USERS SUSPENDED FOR BILLING');
+        console.log('=============================================================');
+        console.log('  [✓] System-wide billing suspension enabled in database');
+        console.log(`  [✓] Logged out all users (${result.modifiedCount} accounts terminated)`);
+        console.log('  [✓] All active sessions terminated immediately');
+        console.log('  [✓] Any login attempt will now display:');
+        console.log(`      "${BILLING_MESSAGE}"`);
+        console.log('  [✓] QR code scans will show Billing Suspension screen');
+        console.log('  [✓] Client business data remains 100% safe & intact');
+        console.log('-------------------------------------------------------------');
+        console.log('  To reactivate the service when payment is settled, run:');
+        console.log('    node server/scripts/suspend.js resume');
+        console.log('    or: node server/scripts/unsuspend.js');
+        console.log('=============================================================\n');
+      }
     }
 
     await mongoose.disconnect();

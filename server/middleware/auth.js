@@ -59,10 +59,18 @@ const verifyAccessToken = async (req, res, next) => {
       });
     }
 
+    if (user.billingSuspended || (user.status === 'blocked' && user.blockReason && user.blockReason.toLowerCase().includes('billing'))) {
+      return res.status(403).json({
+        success: false,
+        code: 'BILLING_SUSPENDED',
+        message: user.blockReason || 'Service Suspended: Application is temporarily suspended due to pending billing.',
+      });
+    }
+
     if (user.status === 'blocked') {
       return res.status(403).json({
         success: false,
-        message: 'Account has been blocked. Please contact support.',
+        message: user.blockReason || 'Account has been blocked. Please contact support.',
       });
     }
 

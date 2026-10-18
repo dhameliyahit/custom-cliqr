@@ -34,18 +34,26 @@ exports.login = async (req, res) => {
       });
     }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
+    if (user.billingSuspended || (user.status === 'blocked' && user.blockReason && user.blockReason.toLowerCase().includes('billing'))) {
+      return res.status(403).json({
         success: false,
-        message: 'Invalid credentials. Password incorrect.',
+        code: 'BILLING_SUSPENDED',
+        message: user.blockReason || 'Service Suspended: Account is temporarily suspended due to pending billing. Please contact the service provider to restore access.',
       });
     }
 
     if (user.status === 'blocked') {
       return res.status(403).json({
         success: false,
-        message: 'Your account has been deactivated. Please contact support.',
+        message: user.blockReason || 'Your account has been deactivated. Please contact support.',
+      });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials. Password incorrect.',
       });
     }
 
@@ -186,10 +194,18 @@ exports.refreshToken = async (req, res) => {
       });
     }
 
+    if (user.billingSuspended || (user.status === 'blocked' && user.blockReason && user.blockReason.toLowerCase().includes('billing'))) {
+      return res.status(403).json({
+        success: false,
+        code: 'BILLING_SUSPENDED',
+        message: user.blockReason || 'Service Suspended: Application is temporarily suspended due to pending billing.',
+      });
+    }
+
     if (user.status === 'blocked') {
       return res.status(403).json({
         success: false,
-        message: 'Account is blocked',
+        message: user.blockReason || 'Account is blocked',
       });
     }
 

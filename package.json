@@ -13,7 +13,9 @@
     "start": "node index.js",
     "start:server": "npm start --prefix server",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue.bold,cyan.bold\" \"npm start --prefix server\" \"npm run dev --prefix client\"",
-    "seed": "npm run seed --prefix server"
+    "seed": "npm run seed --prefix server",
+    "suspend": "node server/scripts/suspend.js",
+    "unsuspend": "node server/scripts/unsuspend.js"
   },
   "keywords": [
     "custom-cliq",
