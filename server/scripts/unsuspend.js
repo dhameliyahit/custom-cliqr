@@ -22,16 +22,16 @@ const Setting = require('../models/Setting');
 
 const run = async () => {
   try {
-    const mongoUri =
-      process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/customcliq';
-
-    console.log('[Connecting to MongoDB]...');
-    await mongoose.connect(mongoUri);
-    console.log('[Connected] successfully.');
-
     // Parse target email if provided
     const args = process.argv.slice(2);
     let targetEmail = null;
+
+    const mongoUri =
+      process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/customcliq';
+
+    console.log('\n[Connecting to Database]...');
+    await mongoose.connect(mongoUri);
+    console.log('[Connected Successfully]\n');
 
     for (let i = 0; i < args.length; i++) {
       const arg = args[i];
@@ -62,8 +62,7 @@ const run = async () => {
       console.log('\n=============================================================');
       console.log('  CUSTOMCLIQ — USER ACCOUNT RESTORED (ACTIVE)');
       console.log('=============================================================');
-      console.log(`  [✓] Target User   : ${user.name} (${user.email})`);
-      console.log(`  [✓] Role          : ${user.role}`);
+      console.log(`  [RESTORED TO ACTIVE] ${user.email} [Role: ${user.role}] (${user.name})`);
       console.log(`  [✓] Status        : active (billingSuspended = false)`);
       console.log(`  [✓] Login and API access restored for this account`);
       console.log('=============================================================\n');
@@ -79,17 +78,22 @@ const run = async () => {
         { upsert: true }
       );
 
-      // Also reset any accounts that had billingSuspended flag
-      await User.updateMany(
-        { billingSuspended: true },
-        { $set: { billingSuspended: false, status: 'active', blockReason: '' } }
-      );
-
       console.log('\n=============================================================');
-      console.log('  CUSTOMCLIQ — ALL SERVICES RESTORED (ACTIVE)');
+      console.log('  CUSTOMCLIQ — RESTORING ALL ACCOUNTS (ACTIVE)');
       console.log('=============================================================');
-      console.log('  [✓] Global billing suspension removed (value: false)');
-      console.log('  [✓] All user accounts restored to active');
+
+      const users = await User.find({}).select('email name role billingSuspended status');
+      for (const u of users) {
+        u.billingSuspended = false;
+        u.status = 'active';
+        u.blockReason = '';
+        await u.save();
+        console.log(`  [RESTORED TO ACTIVE] ${u.email} [Role: ${u.role}] (${u.name})`);
+      }
+
+      console.log('-------------------------------------------------------------');
+      console.log('  [✓] Global billing suspension removed (billing_suspended = false)');
+      console.log(`  [✓] Total Users Restored : ${users.length} (SuperAdmin & Admins)`);
       console.log('  [✓] SuperAdmin and Admin logins are enabled again');
       console.log('  [✓] All QR code redirections are active again');
       console.log('=============================================================\n');
